@@ -224,11 +224,14 @@
     <div class="nav-links">
       <a href="#what">Overview</a>
       <a href="#session">Session</a>
+      <a href="#tls">TLS</a>
+      <a href="#runtime">Runtime</a>
       <a href="#streaming">Streaming</a>
       <a href="#audio">Audio</a>
       <a href="#camera">Camera</a>
       <a href="#webrtc">Transport</a>
       <a href="#network">Network</a>
+      <a href="#docker">Docker</a>
       <a href="#security">Security</a>
       <a href="#perf">Performance</a>
       <a href="#workloads">Workloads</a>
@@ -404,11 +407,296 @@
   </div>
 </section>
 
+<!-- ============ TLS ============ -->
+<section id="tls">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">03 — TLS termination</div>
+      <h2>How an encrypted request is opened, judged and re-sealed</h2>
+      <p>
+        Isolation can only be selective if the platform can read the request. That means
+        terminating TLS in the middle — minting a certificate per destination, presenting it to
+        the client, and opening a separate connection to the real origin. Every step below is a
+        place where a detail can break the chain, so the whole path is drawn out.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 560" role="img"
+         aria-label="TLS termination flow: client CONNECT, SNI read, certificate minted from the enterprise CA and cached per host, two independent TLS legs, content inspection between them, and the separate trust store the isolated browser uses.">
+      <!-- lanes -->
+      <text x="120" y="18" class="d-tm" text-anchor="middle">Client</text>
+      <text x="470" y="18" class="d-tm" text-anchor="middle">Control plane</text>
+      <text x="830" y="18" class="d-tm" text-anchor="middle">Destination / session</text>
+
+      <!-- 1 CONNECT -->
+      <rect x="16" y="34" width="208" height="58" class="d-box-accent"/>
+      <text x="120" y="56" class="d-t" text-anchor="middle">1 · CONNECT host:443</text>
+      <text x="120" y="74" class="d-ts" text-anchor="middle">browser proxy setting</text>
+      <path d="M224 63 H 322" class="d-line-1" marker-end="url(#tar1)"/>
+
+      <rect x="330" y="34" width="280" height="58" class="d-box"/>
+      <text x="470" y="56" class="d-t" text-anchor="middle">2 · Read SNI, decide</text>
+      <text x="470" y="74" class="d-ts" text-anchor="middle">bump this host, or tunnel it blind</text>
+
+      <!-- 3 mint -->
+      <rect x="330" y="108" width="280" height="86" class="d-box-accent"/>
+      <text x="470" y="130" class="d-t" text-anchor="middle">3 · Mint a leaf certificate</text>
+      <text x="470" y="148" class="d-ts" text-anchor="middle">CN = destination host</text>
+      <text x="470" y="164" class="d-ts" text-anchor="middle">signed by the enterprise CA</text>
+      <text x="470" y="182" class="d-tm" text-anchor="middle">cached per host — minted once, reused</text>
+      <path d="M470 92 V 104" class="d-line" marker-end="url(#tar0)"/>
+
+      <rect x="654" y="108" width="272" height="86" class="d-box"/>
+      <text x="790" y="130" class="d-t" text-anchor="middle">Certificate cache</text>
+      <text x="790" y="148" class="d-ts" text-anchor="middle">keyed by host</text>
+      <text x="790" y="166" class="d-tm" text-anchor="middle">avoids an RSA signature</text>
+      <text x="790" y="181" class="d-tm" text-anchor="middle">on every connection</text>
+      <path d="M610 151 H 648" class="d-line" marker-end="url(#tar0)"/>
+
+      <!-- 4 two legs -->
+      <rect x="16" y="216" width="208" height="76" class="d-box"/>
+      <text x="120" y="240" class="d-t" text-anchor="middle">4a · Client-side TLS</text>
+      <text x="120" y="258" class="d-ts" text-anchor="middle">validates the minted leaf</text>
+      <text x="120" y="275" class="d-tm" text-anchor="middle">against the CA in its store</text>
+      <path d="M330 254 H 230" class="d-line-1" marker-end="url(#tar1)"/>
+
+      <rect x="330" y="216" width="280" height="76" class="d-box-accent"/>
+      <text x="470" y="240" class="d-t" text-anchor="middle">Two independent TLS legs</text>
+      <text x="470" y="258" class="d-ts" text-anchor="middle">the proxy is the endpoint of both</text>
+      <text x="470" y="276" class="d-tm" text-anchor="middle">plaintext exists only here, in memory</text>
+
+      <rect x="654" y="216" width="272" height="76" class="d-box"/>
+      <text x="790" y="240" class="d-t" text-anchor="middle">4b · Origin-side TLS</text>
+      <text x="790" y="258" class="d-ts" text-anchor="middle">real certificate, real chain</text>
+      <text x="790" y="275" class="d-tm" text-anchor="middle">validated normally</text>
+      <path d="M610 254 H 648" class="d-line-1" marker-end="url(#tar1)"/>
+
+      <!-- 5 inspect -->
+      <rect x="330" y="314" width="280" height="76" class="d-box"/>
+      <text x="470" y="338" class="d-t" text-anchor="middle">5 · Inspect the plaintext</text>
+      <text x="470" y="356" class="d-ts" text-anchor="middle">URL policy · content filter</text>
+      <text x="470" y="374" class="d-tm" text-anchor="middle">decides isolate / forward / block</text>
+      <path d="M470 292 V 310" class="d-line" marker-end="url(#tar0)"/>
+
+      <!-- 6 two listeners -->
+      <rect x="330" y="412" width="280" height="58" class="d-box-accent"/>
+      <text x="470" y="434" class="d-t" text-anchor="middle">:8080 — client listener</text>
+      <text x="470" y="452" class="d-ts" text-anchor="middle">isolation ON</text>
+      <rect x="330" y="482" width="280" height="58" class="d-box"/>
+      <text x="470" y="504" class="d-t" text-anchor="middle">:3129 — egress listener</text>
+      <text x="470" y="522" class="d-ts" text-anchor="middle">isolation OFF — breaks the loop</text>
+      <path d="M470 390 V 408" class="d-line" marker-end="url(#tar0)"/>
+
+      <!-- container trust -->
+      <rect x="654" y="412" width="272" height="128" class="d-box-accent"/>
+      <text x="790" y="434" class="d-t" text-anchor="middle">Isolated browser trust store</text>
+      <text x="790" y="453" class="d-ts" text-anchor="middle">Chromium on Linux validates against</text>
+      <text x="790" y="469" class="d-ts" text-anchor="middle">its own per-user NSS database,</text>
+      <text x="790" y="485" class="d-ts" text-anchor="middle">NOT the system CA bundle</text>
+      <text x="790" y="505" class="d-tm" text-anchor="middle">the CA is imported with certutil at</text>
+      <text x="790" y="520" class="d-tm" text-anchor="middle">startup — without it every bumped</text>
+      <text x="790" y="535" class="d-tm" text-anchor="middle">page fails authority validation</text>
+      <path d="M610 441 H 648" class="d-line-1" marker-end="url(#tar1)"/>
+
+      <defs>
+        <marker id="tar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
+        </marker>
+        <marker id="tar0" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--axis)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="grid g2" style="margin-top:30px">
+      <div class="card">
+        <h3>Two listeners, and why there must be two</h3>
+        <p style="margin:0 0 12px">
+          The client listener rewrites a navigation into a viewer. But the isolated browser
+          fetches the <em>same</em> site through the platform too — and if it hit the same
+          listener it would be isolated again, and again, forever.
+        </p>
+        <p style="margin:0">
+          So the session's browser is pointed at a second listener where isolation is disabled:
+          it filters and forwards, nothing more. A distinct port makes the distinction
+          unambiguous — no header or cookie sniffing to guess intent, which is the kind of
+          heuristic that breaks the moment a browser changes behaviour.
+        </p>
+      </div>
+      <div class="card">
+        <h3>The detail that breaks silently</h3>
+        <p style="margin:0 0 12px">
+          Chromium on Linux does not use the system CA bundle. It keeps a per-user NSS
+          database, so installing the CA the usual way leaves the isolated browser rejecting
+          every bumped certificate with an authority error — a black page with a healthy
+          container behind it.
+        </p>
+        <p style="margin:0">
+          The container imports the CA into that database with <span class="mono">certutil</span>
+          at startup. It is one line, it is easy to lose in a rebuild, and its failure mode
+          looks like a networking problem rather than a trust problem.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong style="color:var(--text-primary)">What interception costs, stated plainly.</strong>
+      Between the two legs the traffic is plaintext in the proxy's memory. That is the price of
+      per-URL policy and content inspection, and it means the control plane is squarely inside
+      the trust boundary: it holds the signing key, and it sees everything. The enterprise CA
+      must be issued and distributed deliberately, its key protected accordingly, and the fact
+      that a bumped connection is no longer end-to-end should be documented for anyone
+      assessing the deployment rather than discovered by them.
+    </div>
+  </div>
+</section>
+
+<!-- ============ SESSION RUNTIME ============ -->
+<section id="runtime">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">04 — Session runtime</div>
+      <h2>What actually runs inside an isolation container</h2>
+      <p>
+        Six processes under one supervisor. There is no desktop environment and no display
+        hardware — the browser draws into a virtual framebuffer, a virtual sound card receives
+        its audio, and a single Go service turns both into WebRTC while feeding synthetic input
+        back the other way.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 600" role="img"
+         aria-label="Session runtime: supervisord supervising Xorg, openbox, PulseAudio, Chromium, D-Bus and the glass-fence service; the service's capture, WebRTC, session and signalling modules; and the client viewer connected by WebSocket, media tracks and an input data channel.">
+      <!-- supervisor -->
+      <rect x="16" y="30" width="238" height="46" class="d-box-accent"/>
+      <text x="135" y="52" class="d-t" text-anchor="middle">supervisord — PID 1</text>
+      <text x="135" y="68" class="d-ts" text-anchor="middle">restarts anything that dies</text>
+
+      <!-- processes -->
+      <rect x="16" y="98" width="238" height="62" class="d-box"/>
+      <text x="135" y="119" class="d-t" text-anchor="middle">Xorg — display :99</text>
+      <text x="135" y="136" class="d-ts" text-anchor="middle">virtual framebuffer, 1024×576</text>
+      <text x="135" y="152" class="d-tm" text-anchor="middle">-nolisten tcp · no GPU, no monitor</text>
+
+      <rect x="16" y="176" width="238" height="46" class="d-box"/>
+      <text x="135" y="197" class="d-t" text-anchor="middle">openbox</text>
+      <text x="135" y="213" class="d-ts" text-anchor="middle">minimal WM — maps the kiosk window</text>
+
+      <rect x="16" y="238" width="238" height="62" class="d-box"/>
+      <text x="135" y="259" class="d-t" text-anchor="middle">PulseAudio</text>
+      <text x="135" y="276" class="d-ts" text-anchor="middle">virtual sink + virtual source</text>
+      <text x="135" y="292" class="d-tm" text-anchor="middle">module loading disabled</text>
+
+      <rect x="16" y="316" width="238" height="78" class="d-box-accent"/>
+      <text x="135" y="337" class="d-t" text-anchor="middle">Chromium — kiosk</text>
+      <text x="135" y="354" class="d-ts" text-anchor="middle">managed policy · ad filter extension</text>
+      <text x="135" y="370" class="d-ts" text-anchor="middle">pinned to one URL, no omnibox</text>
+      <text x="135" y="386" class="d-tm" text-anchor="middle">renderer capped, sandbox off by design</text>
+
+      <rect x="16" y="410" width="238" height="46" class="d-box"/>
+      <text x="135" y="431" class="d-t" text-anchor="middle">D-Bus</text>
+      <text x="135" y="447" class="d-ts" text-anchor="middle">session bus Chromium expects</text>
+
+      <path d="M135 76 V 94" class="d-line" marker-end="url(#rar0)"/>
+      <path d="M8 60 V 200 H 12" class="d-line"/>
+      <path d="M8 60 V 340 H 12" class="d-line"/>
+      <path d="M8 60 V 432 H 12" class="d-line"/>
+      <path d="M8 60 V 268 H 12" class="d-line"/>
+
+      <!-- glass-fence service -->
+      <rect x="292" y="98" width="404" height="358" class="d-zone"/>
+      <text x="494" y="90" class="d-tm" text-anchor="middle">glass-fence — the streaming service</text>
+
+      <rect x="310" y="116" width="368" height="76" class="d-box-accent"/>
+      <text x="494" y="138" class="d-t" text-anchor="middle">Capture module</text>
+      <text x="494" y="156" class="d-ts" text-anchor="middle">GStreamer pipelines: screen, audio, webcam sink</text>
+      <text x="494" y="174" class="d-tm" text-anchor="middle">pipelines are configuration, not code — see §05/§06</text>
+
+      <rect x="310" y="206" width="368" height="94" class="d-box-accent"/>
+      <text x="494" y="228" class="d-t" text-anchor="middle">WebRTC module</text>
+      <text x="494" y="246" class="d-ts" text-anchor="middle">ICE-lite · TCP mux + UDP mux · DTLS-SRTP</text>
+      <text x="494" y="264" class="d-ts" text-anchor="middle">audio track · video track · input data channel</text>
+      <text x="494" y="284" class="d-tm" text-anchor="middle">advertises exactly one candidate — the configured address</text>
+
+      <rect x="310" y="314" width="368" height="66" class="d-box"/>
+      <text x="494" y="336" class="d-t" text-anchor="middle">Session + member manager</text>
+      <text x="494" y="354" class="d-ts" text-anchor="middle">profiles and capabilities: host, clipboard, watch</text>
+      <text x="494" y="371" class="d-tm" text-anchor="middle">input is refused unless the session holds host</text>
+
+      <rect x="310" y="394" width="368" height="48" class="d-box"/>
+      <text x="494" y="415" class="d-t" text-anchor="middle">Signalling + static server</text>
+      <text x="494" y="432" class="d-ts" text-anchor="middle">WebSocket offer/answer · serves the viewer bundle</text>
+
+      <!-- wires from processes into service -->
+      <path d="M254 129 H 304" class="d-line-1" marker-end="url(#rar1)"/>
+      <text x="279" y="122" class="d-tm" text-anchor="middle">X</text>
+      <path d="M254 262 C 280 262, 280 150, 304 150" class="d-line-3"/>
+      <path d="M254 352 C 276 352, 276 340, 304 340" class="d-line"/>
+
+      <!-- client -->
+      <rect x="736" y="98" width="330" height="358" class="d-zone"/>
+      <text x="901" y="90" class="d-tm" text-anchor="middle">Client viewer — plain browser</text>
+
+      <rect x="754" y="116" width="294" height="58" class="d-box"/>
+      <text x="901" y="138" class="d-t" text-anchor="middle">Viewer bundle</text>
+      <text x="901" y="156" class="d-ts" text-anchor="middle">served from the container</text>
+
+      <rect x="754" y="188" width="294" height="58" class="d-box-accent"/>
+      <text x="901" y="210" class="d-t" text-anchor="middle">Media in</text>
+      <text x="901" y="228" class="d-ts" text-anchor="middle">video + audio tracks, decoded natively</text>
+
+      <rect x="754" y="260" width="294" height="76" class="d-box-accent"/>
+      <text x="901" y="282" class="d-t" text-anchor="middle">Input out — data channel</text>
+      <text x="901" y="300" class="d-ts" text-anchor="middle">keyboard, mouse, scroll, clipboard</text>
+      <text x="901" y="318" class="d-tm" text-anchor="middle">replayed into X as synthetic events</text>
+
+      <rect x="754" y="350" width="294" height="58" class="d-box"/>
+      <text x="901" y="372" class="d-t" text-anchor="middle">Camera + mic out</text>
+      <text x="901" y="390" class="d-ts" text-anchor="middle">become virtual devices in the container</text>
+
+      <path d="M678 145 H 748" class="d-line" marker-end="url(#rar0)"/>
+      <path d="M678 252 H 748" class="d-line-1" marker-end="url(#rar1)"/>
+      <path d="M748 298 H 678" class="d-line-3" marker-end="url(#rar3)"/>
+      <path d="M748 379 H 678" class="d-line-3" marker-end="url(#rar3)"/>
+
+      <text x="540" y="486" class="d-tm" text-anchor="middle">Input travels on the data channel, not the media tracks — if it fails to open, the picture still moves and nothing responds.</text>
+      <text x="540" y="506" class="d-tm" text-anchor="middle">Nothing in this container is reachable from the client except through the service: the X display and the audio socket never leave it.</text>
+
+      <defs>
+        <marker id="rar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
+        </marker>
+        <marker id="rar0" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--axis)"/>
+        </marker>
+        <marker id="rar3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s3)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <table style="margin-top:26px">
+      <thead>
+        <tr><th style="width:22%">Process</th><th style="width:26%">Responsibility</th><th style="width:52%">Why it is there, and what breaks without it</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>supervisord</strong></td><td>PID 1, supervises the rest</td><td>Keeps the container alive as a unit and restarts a failed child. Without a supervisor the container's lifetime would be tied to whichever process happened to be PID 1.</td></tr>
+        <tr><td><strong>Xorg</strong></td><td>Virtual display :99</td><td>The framebuffer the browser paints into and the encoder reads from. Configured with no TCP listener, so the display is reachable only inside the container.</td></tr>
+        <tr><td><strong>openbox</strong></td><td>Window manager</td><td>Maps and sizes the kiosk window. Without a WM the browser window may never be mapped — which presents as a black stream from a container that reports healthy.</td></tr>
+        <tr><td><strong>PulseAudio</strong></td><td>Virtual sound card</td><td>There is no audio hardware. Provides a sink to capture from and a source that carries the client's microphone inward. Module loading is disabled to keep it a fixed, known configuration.</td></tr>
+        <tr><td><strong>Chromium</strong></td><td>The isolated browser</td><td>Runs kiosk, pinned to one URL by managed policy, with dev tools, downloads, sync and popups off. Its own sandbox is disabled deliberately — the throwaway container is the sandbox.</td></tr>
+        <tr><td><strong>D-Bus</strong></td><td>Session bus</td><td>Chromium expects one; without it startup is noisy and some subsystems misbehave.</td></tr>
+        <tr><td><strong>glass-fence</strong></td><td>Capture, WebRTC, session, signalling</td><td>The only process the client ever talks to. Encodes screen and audio, terminates WebRTC, enforces which member may send input, and serves the viewer.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
 <!-- ============ STREAMING ============ -->
 <section id="streaming">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">03 — Streaming architecture</div>
+      <div class="sec-num">05 — Streaming architecture</div>
       <h2>How a screen becomes a stream</h2>
       <p>
         The pixel path is a GStreamer pipeline feeding a WebRTC sender. Every stage is chosen
@@ -491,6 +779,31 @@
         </dl>
       </div>
     </div>
+
+    <h3 style="margin-top:34px">The video pipeline, element by element</h3>
+    <table>
+      <thead>
+        <tr><th style="width:22%">Element</th><th style="width:26%">Setting</th><th style="width:52%">Why, and the failure mode</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Source</strong></td><td>X display, damage-driven</td><td>Reads the virtual framebuffer and only produces a frame when the screen actually changed. This is the single biggest density win: a static page costs about a tenth of a core instead of a full one.</td></tr>
+        <tr><td><strong>Cursor</strong></td><td>not captured</td><td>The pointer is deliberately excluded so the user sees only their own local cursor. Burning a second cursor into the video produces the classic two-cursor confusion.</td></tr>
+        <tr><td><strong>Frame rate cap</strong></td><td>30 fps</td><td>Bounds the capture rate independently of how often the screen changes.</td></tr>
+        <tr><td><strong>Convert</strong></td><td>threaded</td><td>Colour-space conversion into what the encoder wants. Thread count is sized to leave the host room for the browser — oversubscribing shows up as input jitter, not as higher throughput.</td></tr>
+        <tr><td><strong>Queue</strong></td><td>1 frame, <span class="mono">leaky=downstream</span></td><td><strong>Deliberately lossy, the opposite of the audio queue.</strong> Under load it discards the stale frame and encodes the freshest one, so the picture degrades instead of falling behind. A dropped frame is invisible; a late frame is felt.</td></tr>
+        <tr><td><strong>Encoder</strong></td><td>VP8, realtime, no lookahead</td><td>Realtime deadline with lookahead disabled — any frame reordering would add delay for compression the stream cannot spend.</td></tr>
+        <tr><td><strong>Keyframes</strong></td><td>every 2 s</td><td>A receiver cannot decode anything until its first keyframe. Spacing them out to save bandwidth black-screens every joining viewer, and because frames are damage-driven the wait is far longer than the nominal interval suggests.</td></tr>
+        <tr><td><strong>Quantiser floor</strong></td><td>min 4</td><td>Raising the floor caps burst size but imposes a hard quality ceiling — at 10 the encoder can never produce a sharp frame no matter how much bitrate is spare. Burstiness belongs to the rate buffer instead.</td></tr>
+        <tr><td><strong>Error resilience</strong></td><td>disabled</td><td>Loss-recovery coding costs bitrate and quality to survive dropped packets. On a reliable transport there are none, so it buys nothing.</td></tr>
+        <tr><td><strong>Static threshold</strong></td><td>0</td><td>Above zero the encoder skips blocks whose change is small — silently discarding text carets, hover states and focus rings, the very updates that make a UI feel responsive.</td></tr>
+        <tr><td><strong>Sink</strong></td><td>to the WebRTC video track</td><td>Handed to the sender, which paces it and applies congestion control.</td></tr>
+      </tbody>
+    </table>
+    <div class="prov">
+      The two queues are the clearest illustration of why these pipelines are separate: the same
+      element, configured to drop on the video path and never to drop on the audio path, because
+      the consequence of a missing sample differs completely between the two.
+    </div>
   </div>
 </section>
 
@@ -498,7 +811,7 @@
 <section id="audio">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">04 — Audio architecture</div>
+      <div class="sec-num">06 — Audio architecture</div>
       <h2>Sound, in both directions</h2>
       <p>
         Audio is a separate encoded track, not part of the video. The container has no sound
@@ -573,6 +886,37 @@
       sound cutting out and replaying fast. Discontinuous transmission produces the same
       artefact on quiet passages. Both are disabled. Video may drop frames; audio may not.
     </div>
+
+    <h3 style="margin-top:34px">The audio pipeline, element by element</h3>
+    <p>
+      Both media pipelines are configuration rather than compiled code, which is why they can be
+      re-pointed at a different latency/quality trade-off without a rebuild. Each element below
+      earns its place; the notes say what happens if it is wrong.
+    </p>
+    <table>
+      <thead>
+        <tr><th style="width:22%">Element</th><th style="width:26%">Setting</th><th style="width:52%">Why, and the failure mode</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Source</strong></td><td>virtual sink monitor</td><td>Taps what the browser is playing. Capturing the sink's monitor rather than a device is what makes audio work with no sound hardware present.</td></tr>
+        <tr><td><strong>Capture buffer</strong></td><td>60 ms buffer, 20 ms period</td><td>The default keeps a 200 ms buffer. Shrinking it cuts delay — but 5 ms was tried and starves the source on a busy host, which is audible as crackle. 20 ms is the safe floor.</td></tr>
+        <tr><td><strong>Convert</strong></td><td>to the encoder's format</td><td>Normalises sample format and channel layout so the encoder never renegotiates mid-stream.</td></tr>
+        <tr><td><strong>Queue</strong></td><td>50 ms, <span class="mono">leaky=no</span></td><td>Decouples capture from encode so an encoder stall cannot back-pressure the source. <strong>Bounded in time and explicitly non-leaky</strong> — it waits rather than discarding, because a dropped audio buffer is a hole in the waveform.</td></tr>
+        <tr><td><strong>Encoder</strong></td><td>Opus, 128 kbps, 20 ms frames</td><td>20 ms is the WebRTC norm and the most robust. 10 ms halves packetisation delay at the cost of overhead and resilience.</td></tr>
+        <tr><td><strong>DTX</strong></td><td>disabled</td><td>Discontinuous transmission saves bandwidth by not sending near-silence. It reads as audio dropping out on quiet passages — wrong for media playback, acceptable only for push-to-talk.</td></tr>
+        <tr><td><strong>Inband FEC</strong></td><td>disabled</td><td>Forward error correction only pays for itself on a lossy path. Media here rides a reliable transport, so FEC is pure bitrate.</td></tr>
+        <tr><td><strong>Sink</strong></td><td>to the WebRTC audio track</td><td>Handed to the sender as its own track, independent of video — so audio is not re-encoded when video settings change.</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:30px">The upstream path</h3>
+    <p style="margin-bottom:0">
+      The client's microphone arrives as an inbound WebRTC track and is written into a virtual
+      PulseAudio source. Chromium then enumerates an ordinary microphone with no host audio
+      configuration at all — which is what lets a conferencing site inside isolation be heard.
+      Unlike the camera, this needs no kernel device, because sound can be synthesised entirely
+      in userspace.
+    </p>
   </div>
 </section>
 
@@ -580,7 +924,7 @@
 <section id="camera">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">05 — Camera architecture</div>
+      <div class="sec-num">07 — Camera architecture</div>
       <h2>Giving an isolated browser a webcam</h2>
       <p>
         A microphone can be synthesised entirely in userspace. A camera cannot — Chromium
@@ -694,7 +1038,7 @@
 <section id="webrtc">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">06 — Transport</div>
+      <div class="sec-num">08 — Transport</div>
       <h2>Getting media across a hostile network</h2>
       <p>
         WebRTC prefers UDP. Enterprise and public networks frequently do not permit it. The
@@ -768,7 +1112,7 @@
 <section id="network">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">07 — Network architecture</div>
+      <div class="sec-num">09 — Network architecture</div>
       <h2>Every component, address and port</h2>
       <p>
         The deployment view: what runs where, which interface it listens on, and which port
@@ -935,11 +1279,151 @@
   </div>
 </section>
 
+<!-- ============ DOCKER ============ -->
+<section id="docker">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">10 — How it runs in Docker</div>
+      <h2>Two images, one long-lived container, many disposable ones</h2>
+      <p>
+        The platform is not a fixed set of services. One container runs permanently and holds
+        the Docker socket; it creates and destroys the others on demand, one per user per
+        destination. Understanding that split explains most of the operational behaviour.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 520" role="img"
+         aria-label="Docker composition: a control-plane image built from Go source, a session image built from a browser base, the long-lived control container holding the Docker socket, and disposable session containers with their published ports, mounted device and resource limits.">
+      <!-- build -->
+      <text x="150" y="18" class="d-tm" text-anchor="middle">Build</text>
+      <rect x="16" y="34" width="268" height="96" class="d-box"/>
+      <text x="150" y="56" class="d-t" text-anchor="middle">Control-plane image</text>
+      <text x="150" y="74" class="d-ts" text-anchor="middle">multi-stage: Go build → slim runtime</text>
+      <text x="150" y="92" class="d-ts" text-anchor="middle">286 MB</text>
+      <text x="150" y="112" class="d-tm" text-anchor="middle">ships the docker client so it can</text>
+      <text x="150" y="126" class="d-tm" text-anchor="middle">drive the socket it is given</text>
+
+      <rect x="16" y="146" width="268" height="112" class="d-box"/>
+      <text x="150" y="168" class="d-t" text-anchor="middle">Session image</text>
+      <text x="150" y="186" class="d-ts" text-anchor="middle">browser base + X, PulseAudio,</text>
+      <text x="150" y="202" class="d-ts" text-anchor="middle">encoders, policy, ad filter</text>
+      <text x="150" y="220" class="d-ts" text-anchor="middle">2.37 GB</text>
+      <text x="150" y="240" class="d-tm" text-anchor="middle">built once, then every session is</text>
+      <text x="150" y="254" class="d-tm" text-anchor="middle">byte-identical at start</text>
+
+      <!-- runtime -->
+      <rect x="330" y="26" width="736" height="470" class="d-zone"/>
+      <text x="698" y="18" class="d-tm" text-anchor="middle">Runtime on the host</text>
+
+      <rect x="350" y="46" width="340" height="150" class="d-box-accent"/>
+      <text x="520" y="68" class="d-t" text-anchor="middle">Control container — long-lived</text>
+      <text x="520" y="88" class="d-ts" text-anchor="middle">restart: unless-stopped</text>
+      <text x="520" y="106" class="d-ts" text-anchor="middle">publishes :8080 and :8001</text>
+      <text x="520" y="126" class="d-tm" text-anchor="middle">mounts /var/run/docker.sock</text>
+      <text x="520" y="142" class="d-tm" text-anchor="middle">mounts config read-only</text>
+      <text x="520" y="162" class="d-tm" text-anchor="middle">reads the tuning environment and</text>
+      <text x="520" y="177" class="d-tm" text-anchor="middle">the loopback-device list</text>
+
+      <rect x="716" y="46" width="330" height="150" class="d-box-danger"/>
+      <text x="881" y="68" class="d-t" text-anchor="middle">The socket is the privilege</text>
+      <text x="881" y="88" class="d-ts" text-anchor="middle">docker.sock is equivalent to</text>
+      <text x="881" y="104" class="d-ts" text-anchor="middle">root on the host</text>
+      <text x="881" y="126" class="d-tm" text-anchor="middle">a compromise of the control plane</text>
+      <text x="881" y="141" class="d-tm" text-anchor="middle">is a compromise of the machine</text>
+      <text x="881" y="161" class="d-tm" text-anchor="middle">production should front it with a</text>
+      <text x="881" y="176" class="d-tm" text-anchor="middle">scoped socket proxy</text>
+      <path d="M690 121 H 710" class="d-line-x"/>
+
+      <!-- session containers -->
+      <rect x="350" y="228" width="696" height="176" class="d-zone"/>
+      <text x="698" y="220" class="d-tm" text-anchor="middle">Session containers — created per navigation, removed on exit</text>
+
+      <rect x="368" y="246" width="212" height="140" class="d-box-accent"/>
+      <text x="474" y="268" class="d-t" text-anchor="middle">rbi-sess-N</text>
+      <text x="474" y="288" class="d-ts" text-anchor="middle">--rm — no cleanup step</text>
+      <text x="474" y="306" class="d-ts" text-anchor="middle">1.5 GiB memory cap</text>
+      <text x="474" y="324" class="d-ts" text-anchor="middle">CAP_NET_ADMIN only added</text>
+      <text x="474" y="342" class="d-ts" text-anchor="middle">no-new-privileges</text>
+      <text x="474" y="362" class="d-tm" text-anchor="middle">health check gates readiness</text>
+      <text x="474" y="378" class="d-tm" text-anchor="middle">before any client is sent to it</text>
+
+      <rect x="600" y="246" width="212" height="140" class="d-box"/>
+      <text x="706" y="268" class="d-t" text-anchor="middle">Published per session</text>
+      <text x="706" y="288" class="d-ts" text-anchor="middle">viewer → ephemeral host port</text>
+      <text x="706" y="306" class="d-ts" text-anchor="middle">TCP mux from a fixed range</text>
+      <text x="706" y="324" class="d-ts" text-anchor="middle">UDP mux, ephemeral</text>
+      <text x="706" y="344" class="d-tm" text-anchor="middle">the fixed range exists so a</text>
+      <text x="706" y="359" class="d-tm" text-anchor="middle">restricted client can be</text>
+      <text x="706" y="374" class="d-tm" text-anchor="middle">authorised once, not per session</text>
+
+      <rect x="832" y="246" width="196" height="140" class="d-box"/>
+      <text x="930" y="268" class="d-t" text-anchor="middle">Attached in</text>
+      <text x="930" y="288" class="d-ts" text-anchor="middle">--device /dev/videoN</text>
+      <text x="930" y="306" class="d-ts" text-anchor="middle">one node per session</text>
+      <text x="930" y="326" class="d-tm" text-anchor="middle">no bind mounts, no volumes:</text>
+      <text x="930" y="341" class="d-tm" text-anchor="middle">nothing the page writes can</text>
+      <text x="930" y="356" class="d-tm" text-anchor="middle">outlive the container</text>
+
+      <path d="M520 196 V 240" class="d-line-1" marker-end="url(#dar1)"/>
+      <text x="562" y="216" class="d-tm" text-anchor="middle">create / destroy</text>
+      <path d="M284 200 C 320 200, 330 300, 362 300" class="d-line"/>
+
+      <!-- lifecycle -->
+      <rect x="350" y="424" width="696" height="56" class="d-box"/>
+      <text x="698" y="446" class="d-t" text-anchor="middle">Lifecycle</text>
+      <text x="698" y="464" class="d-ts" text-anchor="middle">navigation → create → health check → stream → disconnect or idle timeout → remove</text>
+
+      <defs>
+        <marker id="dar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="grid g2" style="margin-top:30px">
+      <div class="card">
+        <h3>Why sessions are containers rather than processes or tabs</h3>
+        <ul class="tight" style="margin-bottom:0">
+          <li><strong style="color:var(--text-primary)">Disposal is free.</strong> Removing the
+            container removes the filesystem, the profile, the caches and the memory in one
+            step. There is no sanitise-and-reuse path to get wrong.</li>
+          <li><strong style="color:var(--text-primary)">Isolation is the platform's, not the
+            browser's.</strong> Two users on the same site never share a process, a profile or
+            a cookie jar, because they never share a container.</li>
+          <li><strong style="color:var(--text-primary)">Limits are declarative.</strong> Memory
+            ceiling, capabilities and device access are arguments at creation, not code.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>What this costs operationally</h3>
+        <ul class="tight" style="margin-bottom:0">
+          <li><strong style="color:var(--text-primary)">A cold start is real.</strong> Nine to
+            twenty-six seconds, because a container boots an X server, a sound server and a
+            browser before it can be shown to anyone.</li>
+          <li><strong style="color:var(--text-primary)">Host resources are the ceiling.</strong>
+            Sessions are sized in fractions of a core and hundreds of megabytes — density is a
+            capacity-planning exercise, not an afterthought.</li>
+          <li><strong style="color:var(--text-primary)">The control plane is privileged.</strong>
+            It holds the Docker socket, so it must be treated as a root-equivalent component.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong style="color:var(--text-primary)">One consequence worth internalising:</strong>
+      because the session image is built once and every container starts from it unchanged, a
+      fix to the isolated browser is an image rebuild, not a configuration push — and until
+      that rebuild happens, every new session reproduces the old behaviour faithfully. The
+      broken ad-filter permission described in §11 survived exactly that way.
+    </div>
+  </div>
+</section>
+
 <!-- ============ SECURITY ============ -->
 <section id="security">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">08 — Security model</div>
+      <div class="sec-num">11 — Security model</div>
       <h2>Independent layers, each assuming the others failed</h2>
       <p>
         No single control is load-bearing. The design question for each layer is what it still
@@ -1058,7 +1542,7 @@
 <section id="perf">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">09 — Measured performance</div>
+      <div class="sec-num">12 — Measured performance</div>
       <h2>Numbers from this deployment</h2>
       <p>
         Everything in this section was measured on the host described at the foot of the page.
@@ -1356,7 +1840,7 @@
 <section id="workloads">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">10 — Workload validation</div>
+      <div class="sec-num">13 — Workload validation</div>
       <h2>What has been exercised, and what has not</h2>
       <p>
         Isolation is easy to demonstrate on a static page and hard on a real application. All
@@ -1425,7 +1909,7 @@
 <section id="env" style="border-bottom:none">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">11 — Test environment</div>
+      <div class="sec-num">14 — Test environment</div>
       <h2>Where these numbers came from</h2>
       <p>
         A single mid-range server, not a tuned benchmark rig. Figures scale with the host;
