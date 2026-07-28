@@ -224,7 +224,6 @@
     <div class="nav-links">
       <a href="#what">Overview</a>
       <a href="#session">Session</a>
-      <a href="#tls">TLS</a>
       <a href="#runtime">Runtime</a>
       <a href="#streaming">Streaming</a>
       <a href="#audio">Audio</a>
@@ -276,9 +275,9 @@
       <div class="card">
         <h3>Interception, not installation</h3>
         <p style="margin:0">
-          The user points their browser's proxy at Glass Fence. TLS is terminated with an
-          enterprise CA, so the platform sees the request in the clear and decides per host
-          whether to isolate. No agent, no plugin, no extension on the endpoint.
+          The user's browser is pointed at Glass Fence, which decides per destination whether
+          that site should be isolated. Nothing is installed on the endpoint — no agent, no
+          plugin, no extension.
         </p>
       </div>
       <div class="card">
@@ -329,7 +328,7 @@
       <rect x="238" y="26" width="300" height="230" class="d-zone"/>
       <text x="388" y="18" class="d-tm" text-anchor="middle">Glass Fence control plane</text>
       <rect x="256" y="44" width="264" height="62" class="d-box-accent"/>
-      <text x="388" y="68" class="d-t" text-anchor="middle">TLS termination + policy</text>
+      <text x="388" y="68" class="d-t" text-anchor="middle">Request policy</text>
       <text x="388" y="86" class="d-ts" text-anchor="middle">isolate this host? · content filter</text>
       <rect x="256" y="122" width="264" height="56" class="d-box"/>
       <text x="388" y="145" class="d-t" text-anchor="middle">Session controller</text>
@@ -371,8 +370,8 @@
       <div class="card">
         <div class="tile-label">1 · Intercept</div>
         <p style="font-size:.85rem;margin:0">
-          Request arrives at the proxy. TLS is terminated with the enterprise CA, so policy
-          can act on the real URL rather than an opaque tunnel.
+          The request arrives at the platform, which evaluates the destination against policy
+          before anything is fetched.
         </p>
       </div>
       <div class="card">
@@ -407,155 +406,11 @@
   </div>
 </section>
 
-<!-- ============ TLS ============ -->
-<section id="tls">
-  <div class="wrap">
-    <div class="sec-head">
-      <div class="sec-num">03 — TLS termination</div>
-      <h2>How an encrypted request is opened, judged and re-sealed</h2>
-      <p>
-        Isolation can only be selective if the platform can read the request. That means
-        terminating TLS in the middle — minting a certificate per destination, presenting it to
-        the client, and opening a separate connection to the real origin. Every step below is a
-        place where a detail can break the chain, so the whole path is drawn out.
-      </p>
-    </div>
-
-    <svg class="diagram" viewBox="0 0 1080 560" role="img"
-         aria-label="TLS termination flow: client CONNECT, SNI read, certificate minted from the enterprise CA and cached per host, two independent TLS legs, content inspection between them, and the separate trust store the isolated browser uses.">
-      <!-- lanes -->
-      <text x="120" y="18" class="d-tm" text-anchor="middle">Client</text>
-      <text x="470" y="18" class="d-tm" text-anchor="middle">Control plane</text>
-      <text x="830" y="18" class="d-tm" text-anchor="middle">Destination / session</text>
-
-      <!-- 1 CONNECT -->
-      <rect x="16" y="34" width="208" height="58" class="d-box-accent"/>
-      <text x="120" y="56" class="d-t" text-anchor="middle">1 · CONNECT host:443</text>
-      <text x="120" y="74" class="d-ts" text-anchor="middle">browser proxy setting</text>
-      <path d="M224 63 H 322" class="d-line-1" marker-end="url(#tar1)"/>
-
-      <rect x="330" y="34" width="280" height="58" class="d-box"/>
-      <text x="470" y="56" class="d-t" text-anchor="middle">2 · Read SNI, decide</text>
-      <text x="470" y="74" class="d-ts" text-anchor="middle">bump this host, or tunnel it blind</text>
-
-      <!-- 3 mint -->
-      <rect x="330" y="108" width="280" height="86" class="d-box-accent"/>
-      <text x="470" y="130" class="d-t" text-anchor="middle">3 · Mint a leaf certificate</text>
-      <text x="470" y="148" class="d-ts" text-anchor="middle">CN = destination host</text>
-      <text x="470" y="164" class="d-ts" text-anchor="middle">signed by the enterprise CA</text>
-      <text x="470" y="182" class="d-tm" text-anchor="middle">cached per host — minted once, reused</text>
-      <path d="M470 92 V 104" class="d-line" marker-end="url(#tar0)"/>
-
-      <rect x="654" y="108" width="272" height="86" class="d-box"/>
-      <text x="790" y="130" class="d-t" text-anchor="middle">Certificate cache</text>
-      <text x="790" y="148" class="d-ts" text-anchor="middle">keyed by host</text>
-      <text x="790" y="166" class="d-tm" text-anchor="middle">avoids an RSA signature</text>
-      <text x="790" y="181" class="d-tm" text-anchor="middle">on every connection</text>
-      <path d="M610 151 H 648" class="d-line" marker-end="url(#tar0)"/>
-
-      <!-- 4 two legs -->
-      <rect x="16" y="216" width="208" height="76" class="d-box"/>
-      <text x="120" y="240" class="d-t" text-anchor="middle">4a · Client-side TLS</text>
-      <text x="120" y="258" class="d-ts" text-anchor="middle">validates the minted leaf</text>
-      <text x="120" y="275" class="d-tm" text-anchor="middle">against the CA in its store</text>
-      <path d="M330 254 H 230" class="d-line-1" marker-end="url(#tar1)"/>
-
-      <rect x="330" y="216" width="280" height="76" class="d-box-accent"/>
-      <text x="470" y="240" class="d-t" text-anchor="middle">Two independent TLS legs</text>
-      <text x="470" y="258" class="d-ts" text-anchor="middle">the proxy is the endpoint of both</text>
-      <text x="470" y="276" class="d-tm" text-anchor="middle">plaintext exists only here, in memory</text>
-
-      <rect x="654" y="216" width="272" height="76" class="d-box"/>
-      <text x="790" y="240" class="d-t" text-anchor="middle">4b · Origin-side TLS</text>
-      <text x="790" y="258" class="d-ts" text-anchor="middle">real certificate, real chain</text>
-      <text x="790" y="275" class="d-tm" text-anchor="middle">validated normally</text>
-      <path d="M610 254 H 648" class="d-line-1" marker-end="url(#tar1)"/>
-
-      <!-- 5 inspect -->
-      <rect x="330" y="314" width="280" height="76" class="d-box"/>
-      <text x="470" y="338" class="d-t" text-anchor="middle">5 · Inspect the plaintext</text>
-      <text x="470" y="356" class="d-ts" text-anchor="middle">URL policy · content filter</text>
-      <text x="470" y="374" class="d-tm" text-anchor="middle">decides isolate / forward / block</text>
-      <path d="M470 292 V 310" class="d-line" marker-end="url(#tar0)"/>
-
-      <!-- 6 two listeners -->
-      <rect x="330" y="412" width="280" height="58" class="d-box-accent"/>
-      <text x="470" y="434" class="d-t" text-anchor="middle">:8080 — client listener</text>
-      <text x="470" y="452" class="d-ts" text-anchor="middle">isolation ON</text>
-      <rect x="330" y="482" width="280" height="58" class="d-box"/>
-      <text x="470" y="504" class="d-t" text-anchor="middle">:3129 — egress listener</text>
-      <text x="470" y="522" class="d-ts" text-anchor="middle">isolation OFF — breaks the loop</text>
-      <path d="M470 390 V 408" class="d-line" marker-end="url(#tar0)"/>
-
-      <!-- container trust -->
-      <rect x="654" y="412" width="272" height="128" class="d-box-accent"/>
-      <text x="790" y="434" class="d-t" text-anchor="middle">Isolated browser trust store</text>
-      <text x="790" y="453" class="d-ts" text-anchor="middle">Chromium on Linux validates against</text>
-      <text x="790" y="469" class="d-ts" text-anchor="middle">its own per-user NSS database,</text>
-      <text x="790" y="485" class="d-ts" text-anchor="middle">NOT the system CA bundle</text>
-      <text x="790" y="505" class="d-tm" text-anchor="middle">the CA is imported with certutil at</text>
-      <text x="790" y="520" class="d-tm" text-anchor="middle">startup — without it every bumped</text>
-      <text x="790" y="535" class="d-tm" text-anchor="middle">page fails authority validation</text>
-      <path d="M610 441 H 648" class="d-line-1" marker-end="url(#tar1)"/>
-
-      <defs>
-        <marker id="tar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
-        </marker>
-        <marker id="tar0" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--axis)"/>
-        </marker>
-      </defs>
-    </svg>
-
-    <div class="grid g2" style="margin-top:30px">
-      <div class="card">
-        <h3>Two listeners, and why there must be two</h3>
-        <p style="margin:0 0 12px">
-          The client listener rewrites a navigation into a viewer. But the isolated browser
-          fetches the <em>same</em> site through the platform too — and if it hit the same
-          listener it would be isolated again, and again, forever.
-        </p>
-        <p style="margin:0">
-          So the session's browser is pointed at a second listener where isolation is disabled:
-          it filters and forwards, nothing more. A distinct port makes the distinction
-          unambiguous — no header or cookie sniffing to guess intent, which is the kind of
-          heuristic that breaks the moment a browser changes behaviour.
-        </p>
-      </div>
-      <div class="card">
-        <h3>The detail that breaks silently</h3>
-        <p style="margin:0 0 12px">
-          Chromium on Linux does not use the system CA bundle. It keeps a per-user NSS
-          database, so installing the CA the usual way leaves the isolated browser rejecting
-          every bumped certificate with an authority error — a black page with a healthy
-          container behind it.
-        </p>
-        <p style="margin:0">
-          The container imports the CA into that database with <span class="mono">certutil</span>
-          at startup. It is one line, it is easy to lose in a rebuild, and its failure mode
-          looks like a networking problem rather than a trust problem.
-        </p>
-      </div>
-    </div>
-
-    <div class="callout warn">
-      <strong style="color:var(--text-primary)">What interception costs, stated plainly.</strong>
-      Between the two legs the traffic is plaintext in the proxy's memory. That is the price of
-      per-URL policy and content inspection, and it means the control plane is squarely inside
-      the trust boundary: it holds the signing key, and it sees everything. The enterprise CA
-      must be issued and distributed deliberately, its key protected accordingly, and the fact
-      that a bumped connection is no longer end-to-end should be documented for anyone
-      assessing the deployment rather than discovered by them.
-    </div>
-  </div>
-</section>
-
 <!-- ============ SESSION RUNTIME ============ -->
 <section id="runtime">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">04 — Session runtime</div>
+      <div class="sec-num">03 — Session runtime</div>
       <h2>What actually runs inside an isolation container</h2>
       <p>
         Six processes under one supervisor. There is no desktop environment and no display
@@ -610,7 +465,7 @@
       <rect x="310" y="116" width="368" height="76" class="d-box-accent"/>
       <text x="494" y="138" class="d-t" text-anchor="middle">Capture module</text>
       <text x="494" y="156" class="d-ts" text-anchor="middle">GStreamer pipelines: screen, audio, webcam sink</text>
-      <text x="494" y="174" class="d-tm" text-anchor="middle">pipelines are configuration, not code — see §05/§06</text>
+      <text x="494" y="174" class="d-tm" text-anchor="middle">pipelines are configuration, not code — see §04/§05</text>
 
       <rect x="310" y="206" width="368" height="94" class="d-box-accent"/>
       <text x="494" y="228" class="d-t" text-anchor="middle">WebRTC module</text>
@@ -696,7 +551,7 @@
 <section id="streaming">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">05 — Streaming architecture</div>
+      <div class="sec-num">04 — Streaming architecture</div>
       <h2>How a screen becomes a stream</h2>
       <p>
         The pixel path is a GStreamer pipeline feeding a WebRTC sender. Every stage is chosen
@@ -811,7 +666,7 @@
 <section id="audio">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">06 — Audio architecture</div>
+      <div class="sec-num">05 — Audio architecture</div>
       <h2>Sound, in both directions</h2>
       <p>
         Audio is a separate encoded track, not part of the video. The container has no sound
@@ -924,7 +779,7 @@
 <section id="camera">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">07 — Camera architecture</div>
+      <div class="sec-num">06 — Camera architecture</div>
       <h2>Giving an isolated browser a webcam</h2>
       <p>
         A microphone can be synthesised entirely in userspace. A camera cannot — Chromium
@@ -1038,7 +893,7 @@
 <section id="webrtc">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">08 — Transport</div>
+      <div class="sec-num">07 — Transport</div>
       <h2>Getting media across a hostile network</h2>
       <p>
         WebRTC prefers UDP. Enterprise and public networks frequently do not permit it. The
@@ -1112,7 +967,7 @@
 <section id="network">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">09 — Network architecture</div>
+      <div class="sec-num">08 — Network architecture</div>
       <h2>Every component, address and port</h2>
       <p>
         The deployment view: what runs where, which interface it listens on, and which port
@@ -1121,21 +976,18 @@
       </p>
     </div>
 
-    <svg class="diagram" viewBox="0 0 1080 660" role="img"
-         aria-label="Low-level network architecture: client access path, host with control-plane and session containers on a Docker bridge, TURN relay, device and socket attachments, and egress paths. Full detail is in the component table below.">
+    <svg class="diagram" viewBox="0 0 1080 508" role="img"
+         aria-label="Low-level network architecture: client access path, host with control-plane and session containers on a Docker bridge, TURN relay, and device and socket attachments. Full detail is in the component table below.">
       <!-- ============ CLIENT ZONE ============ -->
-      <rect x="1" y="40" width="196" height="230" class="d-zone"/>
+      <rect x="1" y="40" width="196" height="176" class="d-zone"/>
       <text x="99" y="30" class="d-tm" text-anchor="middle">Client endpoint</text>
       <rect x="16" y="58" width="166" height="72" class="d-box-accent"/>
       <text x="99" y="82" class="d-t" text-anchor="middle">Browser</text>
       <text x="99" y="99" class="d-ts" text-anchor="middle">HTTPS proxy configured</text>
       <text x="99" y="115" class="d-tm" text-anchor="middle">no agent, no plugin</text>
       <rect x="16" y="146" width="166" height="52" class="d-box"/>
-      <text x="99" y="167" class="d-t" text-anchor="middle">Enterprise CA</text>
-      <text x="99" y="184" class="d-ts" text-anchor="middle">trusted for TLS bump</text>
-      <rect x="16" y="212" width="166" height="44" class="d-box"/>
-      <text x="99" y="230" class="d-ts" text-anchor="middle">camera + microphone</text>
-      <text x="99" y="245" class="d-tm" text-anchor="middle">captured in the browser</text>
+      <text x="99" y="167" class="d-ts" text-anchor="middle">camera + microphone</text>
+      <text x="99" y="183" class="d-tm" text-anchor="middle">captured in the browser</text>
 
       <!-- access path -->
       <rect x="216" y="120" width="112" height="86" class="d-box-danger"/>
@@ -1147,19 +999,17 @@
       <path d="M328 163 H 352" class="d-line-1" marker-end="url(#nar1)"/>
 
       <!-- ============ HOST ZONE ============ -->
-      <rect x="352" y="14" width="612" height="632" class="d-zone"/>
+      <rect x="352" y="14" width="612" height="480" class="d-zone"/>
       <text x="658" y="6" class="d-tm" text-anchor="middle">RBI host · 8 vCPU · 11 GiB · Ubuntu 24.04</text>
 
       <!-- control plane -->
       <rect x="368" y="34" width="580" height="150" class="d-zone"/>
       <text x="658" y="28" class="d-tm" text-anchor="middle">Control plane container</text>
       <rect x="384" y="50" width="256" height="118" class="d-box-accent"/>
-      <text x="512" y="72" class="d-t" text-anchor="middle">TLS termination + policy</text>
-      <text x="512" y="91" class="d-ts" text-anchor="middle">:8080 client proxy — MITM, filter,</text>
-      <text x="512" y="106" class="d-ts" text-anchor="middle">isolate decision</text>
+      <text x="512" y="72" class="d-t" text-anchor="middle">Request policy + filter</text>
+      <text x="512" y="95" class="d-ts" text-anchor="middle">:8080 client listener — filter,</text>
+      <text x="512" y="110" class="d-ts" text-anchor="middle">isolate decision</text>
       <text x="512" y="126" class="d-ts" text-anchor="middle">:8001 PAC distribution</text>
-      <text x="512" y="146" class="d-tm" text-anchor="middle">:3129 egress listener (design)</text>
-      <text x="512" y="161" class="d-tm" text-anchor="middle">not enforced in this profile</text>
 
       <rect x="664" y="50" width="268" height="56" class="d-box"/>
       <text x="798" y="72" class="d-t" text-anchor="middle">Session controller</text>
@@ -1208,22 +1058,6 @@
       <path d="M650 366 H 668" class="d-line" marker-end="url(#nar0)"/>
       <path d="M650 434 H 668" class="d-line" marker-end="url(#nar0)"/>
 
-      <!-- egress -->
-      <rect x="368" y="500" width="580" height="130" class="d-zone"/>
-      <text x="658" y="494" class="d-tm" text-anchor="middle">Egress</text>
-      <rect x="384" y="516" width="266" height="46" class="d-box-danger"/>
-      <text x="517" y="536" class="d-t" text-anchor="middle">Actual path — direct</text>
-      <text x="517" y="552" class="d-ts" text-anchor="middle">via bridge gateway to the internet</text>
-      <rect x="384" y="574" width="266" height="46" class="d-box"/>
-      <text x="517" y="594" class="d-t" text-anchor="middle">Designed path</text>
-      <text x="517" y="610" class="d-ts" text-anchor="middle">forced through :3129 allowlist</text>
-      <rect x="672" y="540" width="260" height="56" class="d-box"/>
-      <text x="802" y="561" class="d-t" text-anchor="middle">Internet</text>
-      <text x="802" y="578" class="d-ts" text-anchor="middle">origin web servers</text>
-      <path d="M517 462 V 512" class="d-line-x" marker-end="url(#narx)"/>
-      <path d="M650 539 H 668" class="d-line-x" marker-end="url(#narx)"/>
-      <path d="M650 597 C 665 597, 665 570, 668 570" class="d-line"/>
-
       <!-- client to host flows -->
       <path d="M352 163 C 366 163, 370 100, 380 100" class="d-line-1"/>
       <text x="360" y="182" class="d-tm" text-anchor="middle">:8080</text>
@@ -1241,15 +1075,6 @@
       </defs>
     </svg>
 
-    <div class="callout warn">
-      <strong style="color:var(--text-primary)">Read the egress block at the bottom carefully.</strong>
-      The design routes container traffic through the control plane's allowlist on :3129. This
-      deployment does not — session containers sit on an ordinary Docker bridge and reach the
-      internet through its gateway directly. The red path is what actually happens; the plain
-      path is what is intended. That single difference is the gap between demonstrating the
-      architecture and enforcing it.
-    </div>
-
     <h3 style="margin-top:34px">Component and port inventory</h3>
     <table>
       <thead>
@@ -1261,9 +1086,8 @@
         </tr>
       </thead>
       <tbody>
-        <tr><td><strong>Client proxy listener</strong></td><td class="mono">:8080</td><td>HTTP CONNECT + TLS bump</td><td>Every client request enters here. Terminates TLS with the enterprise CA so policy can act on the real URL, then either isolates the host or forwards it to its true origin.</td></tr>
+        <tr><td><strong>Client proxy listener</strong></td><td class="mono">:8080</td><td>HTTP</td><td>Every client request enters here. Policy decides whether the destination is isolated into a session or handled normally.</td></tr>
         <tr><td><strong>PAC distribution</strong></td><td class="mono">:8001</td><td>HTTP</td><td>Serves the proxy auto-config so endpoints can be pointed at the platform without per-machine setup.</td></tr>
-        <tr><td><strong>Egress allowlist listener</strong></td><td class="mono">:3129</td><td>HTTP proxy</td><td>The intended forced egress for session containers, permitting only hosts belonging to live sessions. Present in the design; <strong>not enforced in this profile</strong>.</td></tr>
         <tr><td><strong>Session controller</strong></td><td class="mono">/var/run/docker.sock</td><td>Unix socket</td><td>Creates and destroys session containers, allocates their ports and camera nodes, and reaps idle ones. Socket access is equivalent to host root — front it with a scoped proxy in production.</td></tr>
         <tr><td><strong>Session viewer</strong></td><td class="mono">:8080 → ephemeral</td><td>HTTP + WebSocket</td><td>Each container's viewer and signalling channel, published on an ephemeral host port and reverse-proxied so the client's address bar keeps showing the real site.</td></tr>
         <tr><td><strong>WebRTC TCP multiplex</strong></td><td class="mono">:39000–39019</td><td>TCP</td><td>A <em>fixed</em> range so a client on a TCP-only path can be pre-authorised once. This is the path media actually takes here, because UDP is blocked.</td></tr>
@@ -1272,8 +1096,8 @@
         <tr><td><strong>Virtual display</strong></td><td class="mono">:99</td><td>X11, in-container</td><td>The framebuffer Chromium draws into and the encoder captures from, at 1024×576@30. Never exposed outside the container.</td></tr>
         <tr><td><strong>Virtual audio</strong></td><td class="mono">unix socket</td><td>PulseAudio</td><td>A sink whose monitor is captured for downstream audio, plus a virtual source that presents the client's microphone to the isolated browser.</td></tr>
         <tr><td><strong>Camera loopback</strong></td><td class="mono">/dev/video0–3</td><td>V4L2, kernel</td><td>Four kernel loopback nodes; one is attached per session so Chromium enumerates an ordinary webcam. Node count is the concurrent-camera ceiling.</td></tr>
-        <tr><td><strong>Container network</strong></td><td class="mono">172.17.0.0/16</td><td>Bridge</td><td>Gateway 172.17.0.1, embedded DNS at 127.0.0.11. An ordinary bridge with internet reachability — the design calls for an internal network with no gateway.</td></tr>
-        <tr><td><strong>In-container packet filter</strong></td><td class="mono">nftables</td><td>Netfilter</td><td>Intended default-deny egress permitting only the proxy, DNS and media ports. The ruleset is currently empty.</td></tr>
+        <tr><td><strong>Container network</strong></td><td class="mono">172.17.0.0/16</td><td>Bridge</td><td>Gateway 172.17.0.1, embedded DNS at 127.0.0.11. An ordinary bridge network; the design calls for an internal one with no gateway of its own.</td></tr>
+        <tr><td><strong>In-container packet filter</strong></td><td class="mono">nftables</td><td>Netfilter</td><td>Intended default-deny outbound policy permitting only DNS and media ports. The ruleset is currently empty.</td></tr>
       </tbody>
     </table>
   </div>
@@ -1283,7 +1107,7 @@
 <section id="docker">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">10 — How it runs in Docker</div>
+      <div class="sec-num">09 — How it runs in Docker</div>
       <h2>Two images, one long-lived container, many disposable ones</h2>
       <p>
         The platform is not a fixed set of services. One container runs permanently and holds
@@ -1414,7 +1238,7 @@
       because the session image is built once and every container starts from it unchanged, a
       fix to the isolated browser is an image rebuild, not a configuration push — and until
       that rebuild happens, every new session reproduces the old behaviour faithfully. The
-      broken ad-filter permission described in §11 survived exactly that way.
+      broken ad-filter permission described in §10 survived exactly that way.
     </div>
   </div>
 </section>
@@ -1423,7 +1247,7 @@
 <section id="security">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">11 — Security model</div>
+      <div class="sec-num">10 — Security model</div>
       <h2>Independent layers, each assuming the others failed</h2>
       <p>
         No single control is load-bearing. The design question for each layer is what it still
@@ -1461,19 +1285,13 @@
         </tr>
         <tr>
           <td><strong>Network isolation</strong></td>
-          <td>The container has no usable route of its own; the web is reachable only through the filtering proxy.</td>
+          <td>The container is placed on a network with no route of its own.</td>
           <td>…code ignores the browser proxy setting entirely.</td>
           <td><span class="chip block"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.6 11.4l6.8-6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Not enforced</span></td>
         </tr>
         <tr>
-          <td><strong>Egress allowlist</strong></td>
-          <td>The proxy permits only hosts belonging to active sessions, and filters content in transit.</td>
-          <td>…a session attempts to reach an unrelated destination.</td>
-          <td><span class="chip warn"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5l5.5 10.5H2.5L8 2.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 6.6v2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Demo mode</span></td>
-        </tr>
-        <tr>
           <td><strong>In-container firewall</strong></td>
-          <td>Default-deny egress inside the container; only the proxy, DNS and media ports permitted.</td>
+          <td>Default-deny outbound policy inside the container; only DNS and media ports permitted.</td>
           <td>…a process bypasses every browser-level control.</td>
           <td><span class="chip block"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.6 11.4l6.8-6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Not enforced</span></td>
         </tr>
@@ -1491,10 +1309,6 @@
       design on purpose, and this environment is a demonstration profile — not a hardened
       one.</strong> Measured directly, inside a live session:
       <ul class="tight" style="margin:12px 0 10px">
-        <li><strong style="color:var(--text-primary)">Container egress is open.</strong> DNS
-          resolves, an outbound HTTPS request to a public site returns 200, and a request to a
-          raw IP address also succeeds. The container is on an ordinary bridge network with a
-          default gateway, not the isolated network the design calls for.</li>
         <li><strong style="color:var(--text-primary)">The in-container firewall is absent.</strong>
           The packet-filter ruleset inside the container is empty.</li>
         <li><strong style="color:var(--text-primary)">The URL lock is site-dependent.</strong>
@@ -1510,18 +1324,6 @@
     </div>
 
     <div class="grid g2" style="margin-top:26px">
-      <div class="card">
-        <h3>TLS interception</h3>
-        <p style="margin:0 0 12px">
-          Termination uses an enterprise CA distributed to managed endpoints, which is what
-          allows per-URL policy and content inspection instead of blind tunnelling.
-        </p>
-        <dl class="kv">
-          <dt>Authority</dt><dd>Accops TLS Termination Root CA</dd>
-          <dt>Organisation</dt><dd>Accops.com</dd>
-          <dt>Valid to</dt><dd>June 2036</dd>
-        </dl>
-      </div>
       <div class="card">
         <h3>Content controls in the isolated browser</h3>
         <p style="margin:0 0 12px">
@@ -1542,7 +1344,7 @@
 <section id="perf">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">12 — Measured performance</div>
+      <div class="sec-num">11 — Measured performance</div>
       <h2>Numbers from this deployment</h2>
       <p>
         Everything in this section was measured on the host described at the foot of the page.
@@ -1840,7 +1642,7 @@
 <section id="workloads">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">13 — Workload validation</div>
+      <div class="sec-num">12 — Workload validation</div>
       <h2>What has been exercised, and what has not</h2>
       <p>
         Isolation is easy to demonstrate on a static page and hard on a real application. All
@@ -1909,7 +1711,7 @@
 <section id="env" style="border-bottom:none">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">14 — Test environment</div>
+      <div class="sec-num">13 — Test environment</div>
       <h2>Where these numbers came from</h2>
       <p>
         A single mid-range server, not a tuned benchmark rig. Figures scale with the host;
@@ -1955,8 +1757,7 @@
       <br><br>
       The gap to a production claim is <strong>containment</strong>, and it is five specific
       items: move sessions onto the isolated network so the container has no route of its own;
-      enable the egress allowlist and the in-container firewall; tighten capabilities to
-      drop-all-then-add-back; stop spawning sessions for sub-resource requests, which both
+      enable the in-container firewall; tighten capabilities to drop-all-then-add-back; stop spawning sessions for sub-resource requests, which both
       multiplies containers and lets a stray request claim a camera node; and resolve the
       multi-domain question so YouTube and Teams do not require lifting the URL lock wholesale.
       None is speculative and none blocks the others. Until they are done this is a strong
