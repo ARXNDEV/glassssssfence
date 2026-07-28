@@ -675,62 +675,82 @@
       </p>
     </div>
 
-    <svg class="diagram" viewBox="0 0 1080 260" role="img"
-         aria-label="Audio path: Chromium plays into a virtual sink whose monitor is captured and Opus encoded to the client; the client microphone is fed back in as a virtual source.">
-      <text x="16" y="16" class="d-tm">Downstream — container sound to the user</text>
-      <rect x="1"   y="28" width="152" height="62" class="d-box"/>
-      <text x="77"  y="54"  class="d-t"  text-anchor="middle">Chromium</text>
-      <text x="77"  y="71"  class="d-ts" text-anchor="middle">page audio</text>
-
-      <rect x="196" y="28" width="176" height="62" class="d-box-accent"/>
-      <text x="284" y="52"  class="d-t"  text-anchor="middle">Virtual sink</text>
-      <text x="284" y="69"  class="d-ts" text-anchor="middle">no hardware present</text>
-
-      <rect x="415" y="28" width="176" height="62" class="d-box"/>
-      <text x="503" y="52"  class="d-t"  text-anchor="middle">Monitor capture</text>
-      <text x="503" y="69"  class="d-ts" text-anchor="middle">taps the sink output</text>
-
-      <rect x="634" y="28" width="176" height="62" class="d-box-accent"/>
-      <text x="722" y="46"  class="d-t"  text-anchor="middle">Opus encode</text>
-      <text x="722" y="63"  class="d-ts" text-anchor="middle">128 kbps · 20 ms frames</text>
-      <text x="722" y="79"  class="d-tm" text-anchor="middle">no DTX, no lossy queue</text>
-
-      <rect x="853" y="28" width="226" height="62" class="d-box"/>
-      <text x="966" y="54"  class="d-t"  text-anchor="middle">WebRTC audio track</text>
-      <text x="966" y="71"  class="d-ts" text-anchor="middle">separate from video</text>
-
-      <path d="M153 59 H 190" class="d-line-1" marker-end="url(#ar1c)"/>
-      <path d="M372 59 H 409" class="d-line-1" marker-end="url(#ar1c)"/>
-      <path d="M591 59 H 628" class="d-line-1" marker-end="url(#ar1c)"/>
-      <path d="M810 59 H 847" class="d-line-1" marker-end="url(#ar1c)"/>
-
-      <text x="16" y="150" class="d-tm">Upstream — user microphone into the isolated browser</text>
-      <rect x="1"   y="162" width="152" height="62" class="d-box"/>
-      <text x="77"  y="188" class="d-t"  text-anchor="middle">User microphone</text>
-      <text x="77"  y="205" class="d-ts" text-anchor="middle">browser capture</text>
-
-      <rect x="196" y="162" width="176" height="62" class="d-box"/>
-      <text x="284" y="188" class="d-t"  text-anchor="middle">WebRTC inbound</text>
-      <text x="284" y="205" class="d-ts" text-anchor="middle">client → container</text>
-
-      <rect x="415" y="162" width="176" height="62" class="d-box-accent"/>
-      <text x="503" y="188" class="d-t"  text-anchor="middle">Virtual source</text>
-      <text x="503" y="205" class="d-ts" text-anchor="middle">userspace device</text>
-
-      <rect x="634" y="162" width="445" height="62" class="d-box"/>
-      <text x="856" y="188" class="d-t"  text-anchor="middle">Chromium sees a normal microphone</text>
-      <text x="856" y="205" class="d-ts" text-anchor="middle">conferencing sites work without host audio configuration</text>
-
-      <path d="M153 193 H 190" class="d-line-3" marker-end="url(#ar3c)"/>
-      <path d="M372 193 H 409" class="d-line-3" marker-end="url(#ar3c)"/>
-      <path d="M591 193 H 628" class="d-line-3" marker-end="url(#ar3c)"/>
+    <svg class="diagram" viewBox="0 0 1080 742" role="img"
+         aria-label="Audio architecture in full: the downstream chain from Chromium through the virtual sink, its monitor, the capture element, converter, non-leaky queue and Opus encoder to the WebRTC track and the client; and the upstream chain carrying the client microphone into a virtual source the browser sees as ordinary hardware. Element settings are in the table below.">
+      <text x="260" y="34" class="d-tm" text-anchor="middle">Downstream &#8212; container sound to the user</text>
+      <text x="792" y="34" class="d-tm" text-anchor="middle">Upstream &#8212; user microphone into the browser</text>
+      <rect x="34" y="74" width="452" height="58" class="d-box"/>
+      <text x="260" y="98" class="d-t" text-anchor="middle">Chromium</text>
+      <text x="260" y="116" class="d-ts" text-anchor="middle">page audio via its audio service</text>
+      <path d="M260 132 V 146" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="146" width="452" height="58" class="d-box-accent"/>
+      <text x="260" y="164" class="d-t" text-anchor="middle">Virtual sink &#8212; audio_output</text>
+      <text x="260" y="180" class="d-ts" text-anchor="middle">null-sink &#183; 48 kHz s16le stereo</text>
+      <text x="260" y="194" class="d-tm" text-anchor="middle">no sound hardware exists in the container</text>
+      <path d="M260 204 V 218" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="218" width="452" height="58" class="d-box"/>
+      <text x="260" y="236" class="d-t" text-anchor="middle">Sink monitor</text>
+      <text x="260" y="252" class="d-ts" text-anchor="middle">audio_output.monitor</text>
+      <text x="260" y="266" class="d-tm" text-anchor="middle">taps what the sink received</text>
+      <path d="M260 276 V 290" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="290" width="452" height="58" class="d-box-accent"/>
+      <text x="260" y="308" class="d-t" text-anchor="middle">pulsesrc</text>
+      <text x="260" y="324" class="d-ts" text-anchor="middle">buffer-time 60 ms &#183; latency-time 20 ms</text>
+      <text x="260" y="338" class="d-tm" text-anchor="middle">5 ms was tried &#8212; starves the source, crackles</text>
+      <path d="M260 348 V 362" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="362" width="452" height="58" class="d-box"/>
+      <text x="260" y="380" class="d-t" text-anchor="middle">audioconvert</text>
+      <text x="260" y="396" class="d-ts" text-anchor="middle">normalise format and channel layout</text>
+      <text x="260" y="410" class="d-tm" text-anchor="middle">so the encoder never renegotiates</text>
+      <path d="M260 420 V 434" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="434" width="452" height="58" class="d-box-accent"/>
+      <text x="260" y="452" class="d-t" text-anchor="middle">queue</text>
+      <text x="260" y="468" class="d-ts" text-anchor="middle">50 ms &#183; leaky=no</text>
+      <text x="260" y="482" class="d-tm" text-anchor="middle">waits, never discards &#8212; a dropped sample is a hole</text>
+      <path d="M260 492 V 506" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="506" width="452" height="58" class="d-box-accent"/>
+      <text x="260" y="524" class="d-t" text-anchor="middle">opusenc</text>
+      <text x="260" y="540" class="d-ts" text-anchor="middle">128 kbps &#183; 20 ms frames &#183; fullband</text>
+      <text x="260" y="554" class="d-tm" text-anchor="middle">DTX off &#183; inband FEC off</text>
+      <path d="M260 564 V 578" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="578" width="452" height="58" class="d-box"/>
+      <text x="260" y="602" class="d-t" text-anchor="middle">appsink &#8594; WebRTC audio track</text>
+      <text x="260" y="620" class="d-ts" text-anchor="middle">its own track, independent of video</text>
+      <path d="M260 636 V 650" class="d-line-1" marker-end="url(#aar1)"/>
+      <rect x="34" y="650" width="452" height="58" class="d-box"/>
+      <text x="260" y="668" class="d-t" text-anchor="middle">Client</text>
+      <text x="260" y="684" class="d-ts" text-anchor="middle">jitter buffer, then playback</text>
+      <text x="260" y="698" class="d-tm" text-anchor="middle">depth is the receiving browser's choice</text>
+      <rect x="566" y="74" width="452" height="58" class="d-box"/>
+      <text x="792" y="98" class="d-t" text-anchor="middle">Client microphone</text>
+      <text x="792" y="116" class="d-ts" text-anchor="middle">captured by the browser</text>
+      <path d="M792 132 V 146" class="d-line-3" marker-end="url(#aar3)"/>
+      <rect x="566" y="146" width="452" height="58" class="d-box"/>
+      <text x="792" y="170" class="d-t" text-anchor="middle">WebRTC inbound audio track</text>
+      <text x="792" y="188" class="d-ts" text-anchor="middle">client &#8594; container</text>
+      <path d="M792 204 V 218" class="d-line-3" marker-end="url(#aar3)"/>
+      <rect x="566" y="218" width="452" height="58" class="d-box-accent"/>
+      <text x="792" y="242" class="d-t" text-anchor="middle">Virtual source &#8212; microphone</text>
+      <text x="792" y="260" class="d-ts" text-anchor="middle">module-virtual-source</text>
+      <path d="M792 276 V 290" class="d-line-3" marker-end="url(#aar3)"/>
+      <rect x="566" y="290" width="452" height="58" class="d-box"/>
+      <text x="792" y="314" class="d-t" text-anchor="middle">Master: audio_input.monitor</text>
+      <text x="792" y="332" class="d-ts" text-anchor="middle">fed by null-sink audio_input</text>
+      <path d="M792 348 V 362" class="d-line-3" marker-end="url(#aar3)"/>
+      <rect x="566" y="362" width="452" height="58" class="d-box"/>
+      <text x="792" y="380" class="d-t" text-anchor="middle">Chromium</text>
+      <text x="792" y="396" class="d-ts" text-anchor="middle">enumerates an ordinary microphone</text>
+      <text x="792" y="410" class="d-tm" text-anchor="middle">no host audio configuration needed</text>
+      <rect x="566" y="448" width="452" height="150" class="d-box"/>
+      <text x="792" y="476" class="d-t" text-anchor="middle">Why the microphone is the easy one</text>
+      <text x="792" y="500" class="d-ts" text-anchor="middle">Sound can be synthesised entirely in userspace,</text>
+      <text x="792" y="518" class="d-ts" text-anchor="middle">so a virtual source is enough and nothing on the</text>
+      <text x="792" y="536" class="d-ts" text-anchor="middle">host has to be prepared in advance.</text>
+      <text x="792" y="560" class="d-tm" text-anchor="middle">The camera cannot work this way &#8212; Chromium</text>
+      <text x="792" y="576" class="d-tm" text-anchor="middle">enumerates video devices through the kernel.</text>
       <defs>
-        <marker id="ar1c" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
-        </marker>
-        <marker id="ar3c" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s3)"/>
-        </marker>
+        <marker id="aar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/></marker>
+        <marker id="aar3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="var(--s3)"/></marker>
       </defs>
     </svg>
 
@@ -788,41 +808,74 @@
       </p>
     </div>
 
-    <svg class="diagram" viewBox="0 0 1080 210" role="img"
-         aria-label="Camera path: the client camera track arrives over WebRTC, is written into a kernel loopback video device on the host, mounted into the container, and enumerated by Chromium as a webcam.">
-      <rect x="1"   y="56" width="168" height="70" class="d-box"/>
-      <text x="85"  y="84"  class="d-t"  text-anchor="middle">User camera</text>
-      <text x="85"  y="101" class="d-ts" text-anchor="middle">browser capture</text>
-
-      <rect x="209" y="56" width="176" height="70" class="d-box"/>
-      <text x="297" y="84"  class="d-t"  text-anchor="middle">WebRTC video in</text>
-      <text x="297" y="101" class="d-ts" text-anchor="middle">640×480</text>
-
-      <rect x="425" y="56" width="196" height="70" class="d-box-accent"/>
-      <text x="523" y="78"  class="d-t"  text-anchor="middle">Kernel loopback device</text>
-      <text x="523" y="95"  class="d-ts" text-anchor="middle">v4l2loopback on the host</text>
-      <text x="523" y="111" class="d-tm" text-anchor="middle">host prerequisite</text>
-
-      <rect x="661" y="56" width="176" height="70" class="d-box"/>
-      <text x="749" y="84"  class="d-t"  text-anchor="middle">Mounted into session</text>
-      <text x="749" y="101" class="d-ts" text-anchor="middle">per-container device</text>
-
-      <rect x="877" y="56" width="202" height="70" class="d-box-accent"/>
-      <text x="978" y="78"  class="d-t"  text-anchor="middle">Chromium</text>
-      <text x="978" y="95"  class="d-ts" text-anchor="middle">sees an ordinary webcam</text>
-      <text x="978" y="111" class="d-tm" text-anchor="middle">policy-gated per site</text>
-
-      <path d="M169 91 H 203" class="d-line-3" marker-end="url(#ar3d)"/>
-      <path d="M385 91 H 419" class="d-line-3" marker-end="url(#ar3d)"/>
-      <path d="M621 91 H 655" class="d-line-3" marker-end="url(#ar3d)"/>
-      <path d="M837 91 H 871" class="d-line-3" marker-end="url(#ar3d)"/>
-      <text x="540" y="178" class="d-tm" text-anchor="middle">
-        Camera imagery makes a full round trip — in over the network, then back out inside the screen stream.
-      </text>
+    <svg class="diagram" viewBox="0 0 1080 552" role="img"
+         aria-label="Camera architecture in full: the client camera travels inbound over WebRTC, is decoded and written into a kernel loopback device, enumerated by Chromium as an ordinary webcam, rendered into the page, composited onto the virtual display, then re-encoded as part of the screen and sent back to the client &#8212; a complete round trip.">
+      <rect x="16" y="62" width="196" height="64" class="d-box"/>
+      <text x="114" y="88" class="d-t" text-anchor="middle">Client camera</text>
+      <text x="114" y="106" class="d-ts" text-anchor="middle">browser capture</text>
+      <path d="M212 94 H 222" class="d-line-3" marker-end="url(#car3)"/>
+      <rect x="228" y="62" width="196" height="64" class="d-box"/>
+      <text x="326" y="88" class="d-t" text-anchor="middle">getUserMedia</text>
+      <text x="326" y="106" class="d-ts" text-anchor="middle">640 &#215; 480</text>
+      <path d="M424 94 H 434" class="d-line-3" marker-end="url(#car3)"/>
+      <rect x="440" y="62" width="196" height="64" class="d-box"/>
+      <text x="538" y="88" class="d-t" text-anchor="middle">WebRTC inbound</text>
+      <text x="538" y="106" class="d-ts" text-anchor="middle">video track &#183; DTLS-SRTP</text>
+      <path d="M636 94 H 646" class="d-line-3" marker-end="url(#car3)"/>
+      <rect x="652" y="62" width="196" height="64" class="d-box"/>
+      <text x="750" y="88" class="d-t" text-anchor="middle">Decode</text>
+      <text x="750" y="106" class="d-ts" text-anchor="middle">in the streaming service</text>
+      <path d="M848 94 H 858" class="d-line-3" marker-end="url(#car3)"/>
+      <rect x="864" y="62" width="196" height="64" class="d-box-accent"/>
+      <text x="962" y="88" class="d-t" text-anchor="middle">v4l2sink</text>
+      <text x="962" y="106" class="d-ts" text-anchor="middle">writes raw frames out</text>
+      <rect x="652" y="186" width="408" height="86" class="d-box-accent"/>
+      <text x="856" y="208" class="d-t" text-anchor="middle">/dev/videoN &#8212; v4l2loopback</text>
+      <text x="856" y="228" class="d-ts" text-anchor="middle">YU12 planar YUV 4:2:0 &#183; 640 &#215; 480 &#183; advertises 30 fps</text>
+      <text x="856" y="246" class="d-tm" text-anchor="middle">exclusive_caps=1 &#183; max_buffers=2 &#183; one node per session</text>
+      <text x="856" y="263" class="d-tm" text-anchor="middle">mounted in with --device &#183; sharing a node collapses every reader to ~1 fps</text>
+      <path d="M962 126 V 180" class="d-line-3" marker-end="url(#car3)"/>
+      <rect x="864" y="306" width="196" height="64" class="d-box-accent"/>
+      <text x="962" y="332" class="d-t" text-anchor="middle">Chromium capture</text>
+      <text x="962" y="350" class="d-ts" text-anchor="middle">policy-gated per origin</text>
+      <path d="M858 338 H 854" class="d-line" marker-end="url(#car0)"/>
+      <rect x="652" y="306" width="196" height="64" class="d-box"/>
+      <text x="750" y="332" class="d-t" text-anchor="middle">Page renders it</text>
+      <text x="750" y="350" class="d-ts" text-anchor="middle">video element in the DOM</text>
+      <path d="M646 338 H 642" class="d-line" marker-end="url(#car0)"/>
+      <rect x="440" y="306" width="196" height="64" class="d-box"/>
+      <text x="538" y="332" class="d-t" text-anchor="middle">Composited</text>
+      <text x="538" y="350" class="d-ts" text-anchor="middle">onto X display :99</text>
+      <path d="M434 338 H 430" class="d-line" marker-end="url(#car0)"/>
+      <rect x="228" y="306" width="196" height="64" class="d-box"/>
+      <text x="326" y="332" class="d-t" text-anchor="middle">ximagesrc</text>
+      <text x="326" y="350" class="d-ts" text-anchor="middle">captures the whole screen</text>
+      <path d="M222 338 H 218" class="d-line" marker-end="url(#car0)"/>
+      <rect x="16" y="306" width="196" height="64" class="d-box"/>
+      <text x="114" y="332" class="d-t" text-anchor="middle">VP8 encode</text>
+      <text x="114" y="350" class="d-ts" text-anchor="middle">as part of the desktop</text>
+      <path d="M962 272 V 300" class="d-line-3" marker-end="url(#car3)"/>
+      <rect x="16" y="430" width="196" height="64" class="d-box"/>
+      <text x="114" y="456" class="d-t" text-anchor="middle">WebRTC outbound</text>
+      <text x="114" y="474" class="d-ts" text-anchor="middle">inside the screen stream</text>
+      <path d="M212 462 H 222" class="d-line-1" marker-end="url(#car1)"/>
+      <rect x="228" y="430" width="196" height="64" class="d-box"/>
+      <text x="326" y="456" class="d-t" text-anchor="middle">Client decode</text>
+      <text x="326" y="474" class="d-ts" text-anchor="middle">one more decode</text>
+      <path d="M424 462 H 434" class="d-line-1" marker-end="url(#car1)"/>
+      <rect x="440" y="430" width="196" height="64" class="d-box-danger"/>
+      <text x="538" y="456" class="d-t" text-anchor="middle">User sees themselves</text>
+      <text x="538" y="474" class="d-ts" text-anchor="middle">after a full round trip</text>
+      <path d="M114 370 V 424" class="d-line" marker-end="url(#car0)"/>
+      <rect x="652" y="430" width="408" height="86" class="d-box"/>
+      <text x="856" y="452" class="d-t" text-anchor="middle">The cost of the loop</text>
+      <text x="856" y="472" class="d-ts" text-anchor="middle">Two network legs, two decodes, one extra encode.</text>
+      <text x="856" y="490" class="d-tm" text-anchor="middle">Self-view will always lag the rest of the picture.</text>
+      <text x="856" y="507" class="d-tm" text-anchor="middle">Lower camera resolution shortens it; nothing removes it.</text>
       <defs>
-        <marker id="ar3d" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s3)"/>
-        </marker>
+        <marker id="car1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/></marker>
+        <marker id="car3" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="var(--s3)"/></marker>
+        <marker id="car0" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7 z" fill="var(--axis)"/></marker>
       </defs>
     </svg>
 
