@@ -228,6 +228,7 @@
       <a href="#audio">Audio</a>
       <a href="#camera">Camera</a>
       <a href="#webrtc">Transport</a>
+      <a href="#network">Network</a>
       <a href="#security">Security</a>
       <a href="#perf">Performance</a>
       <a href="#workloads">Workloads</a>
@@ -346,19 +347,12 @@
       <text x="741" y="207" class="d-t" text-anchor="middle">In-container firewall</text>
       <text x="741" y="224" class="d-ts" text-anchor="middle">default-deny egress</text>
 
-      <rect x="944" y="60" width="134" height="112" class="d-box"/>
-      <text x="1011" y="96" class="d-t" text-anchor="middle">Internet</text>
-      <text x="1011" y="114" class="d-ts" text-anchor="middle">reached only</text>
-      <text x="1011" y="129" class="d-ts" text-anchor="middle">via the proxy</text>
-
       <path d="M181 100 H 250" class="d-line-1" marker-end="url(#ar1)"/>
       <path d="M250 132 H 181" class="d-line-1" marker-end="url(#ar1)"/>
       <text x="215" y="92" class="d-tm" text-anchor="middle">request</text>
       <text x="215" y="152" class="d-tm" text-anchor="middle">stream</text>
       <path d="M520 150 H 608" class="d-line" marker-end="url(#ar0)"/>
       <text x="564" y="142" class="d-tm" text-anchor="middle">launch</text>
-      <path d="M868 72 H 938" class="d-line-x"/>
-      <text x="903" y="64" class="d-tm" text-anchor="middle">blocked</text>
       <path d="M614 210 C 560 260, 300 268, 388 244" class="d-line-3"/>
       <defs>
         <marker id="ar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
@@ -770,11 +764,182 @@
   </div>
 </section>
 
+<!-- ============ NETWORK ARCHITECTURE ============ -->
+<section id="network">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">07 — Network architecture</div>
+      <h2>Every component, address and port</h2>
+      <p>
+        The deployment view: what runs where, which interface it listens on, and which port
+        carries which protocol. Addresses and ports below are the live values from this
+        environment, not illustrative placeholders.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 660" role="img"
+         aria-label="Low-level network architecture: client access path, host with control-plane and session containers on a Docker bridge, TURN relay, device and socket attachments, and egress paths. Full detail is in the component table below.">
+      <!-- ============ CLIENT ZONE ============ -->
+      <rect x="1" y="40" width="196" height="230" class="d-zone"/>
+      <text x="99" y="30" class="d-tm" text-anchor="middle">Client endpoint</text>
+      <rect x="16" y="58" width="166" height="72" class="d-box-accent"/>
+      <text x="99" y="82" class="d-t" text-anchor="middle">Browser</text>
+      <text x="99" y="99" class="d-ts" text-anchor="middle">HTTPS proxy configured</text>
+      <text x="99" y="115" class="d-tm" text-anchor="middle">no agent, no plugin</text>
+      <rect x="16" y="146" width="166" height="52" class="d-box"/>
+      <text x="99" y="167" class="d-t" text-anchor="middle">Enterprise CA</text>
+      <text x="99" y="184" class="d-ts" text-anchor="middle">trusted for TLS bump</text>
+      <rect x="16" y="212" width="166" height="44" class="d-box"/>
+      <text x="99" y="230" class="d-ts" text-anchor="middle">camera + microphone</text>
+      <text x="99" y="245" class="d-tm" text-anchor="middle">captured in the browser</text>
+
+      <!-- access path -->
+      <rect x="216" y="120" width="112" height="86" class="d-box-danger"/>
+      <text x="272" y="145" class="d-t" text-anchor="middle">Access path</text>
+      <text x="272" y="162" class="d-ts" text-anchor="middle">TCP only</text>
+      <text x="272" y="178" class="d-tm" text-anchor="middle">UDP blocked</text>
+      <text x="272" y="194" class="d-tm" text-anchor="middle">RTT 45 ms</text>
+      <path d="M182 94 C 200 94, 200 150, 212 150" class="d-line-1"/>
+      <path d="M328 163 H 352" class="d-line-1" marker-end="url(#nar1)"/>
+
+      <!-- ============ HOST ZONE ============ -->
+      <rect x="352" y="14" width="612" height="632" class="d-zone"/>
+      <text x="658" y="6" class="d-tm" text-anchor="middle">RBI host · 8 vCPU · 11 GiB · Ubuntu 24.04</text>
+
+      <!-- control plane -->
+      <rect x="368" y="34" width="580" height="150" class="d-zone"/>
+      <text x="658" y="28" class="d-tm" text-anchor="middle">Control plane container</text>
+      <rect x="384" y="50" width="256" height="118" class="d-box-accent"/>
+      <text x="512" y="72" class="d-t" text-anchor="middle">TLS termination + policy</text>
+      <text x="512" y="91" class="d-ts" text-anchor="middle">:8080 client proxy — MITM, filter,</text>
+      <text x="512" y="106" class="d-ts" text-anchor="middle">isolate decision</text>
+      <text x="512" y="126" class="d-ts" text-anchor="middle">:8001 PAC distribution</text>
+      <text x="512" y="146" class="d-tm" text-anchor="middle">:3129 egress listener (design)</text>
+      <text x="512" y="161" class="d-tm" text-anchor="middle">not enforced in this profile</text>
+
+      <rect x="664" y="50" width="268" height="56" class="d-box"/>
+      <text x="798" y="72" class="d-t" text-anchor="middle">Session controller</text>
+      <text x="798" y="90" class="d-ts" text-anchor="middle">docker.sock — create / destroy</text>
+
+      <rect x="664" y="118" width="268" height="50" class="d-box"/>
+      <text x="798" y="138" class="d-t" text-anchor="middle">Port + device allocator</text>
+      <text x="798" y="155" class="d-ts" text-anchor="middle">one loopback node per session</text>
+
+      <!-- bridge -->
+      <rect x="368" y="200" width="580" height="34" class="d-box"/>
+      <text x="658" y="216" class="d-t" text-anchor="middle">Docker bridge network</text>
+      <text x="658" y="229" class="d-ts" text-anchor="middle">gateway 172.17.0.1 · embedded DNS 127.0.0.11 · containers 172.17.0.0/16</text>
+
+      <!-- session containers -->
+      <rect x="368" y="250" width="580" height="228" class="d-zone"/>
+      <text x="658" y="244" class="d-tm" text-anchor="middle">Session containers — one per client + host, single use</text>
+
+      <rect x="384" y="266" width="266" height="196" class="d-box-accent"/>
+      <text x="517" y="288" class="d-t" text-anchor="middle">rbi-sess-N</text>
+      <text x="517" y="307" class="d-ts" text-anchor="middle">Chromium kiosk — managed policy</text>
+      <text x="517" y="323" class="d-ts" text-anchor="middle">Xvfb display :99 · 1024×576@30</text>
+      <text x="517" y="339" class="d-ts" text-anchor="middle">VP8 + Opus encoders</text>
+      <text x="517" y="358" class="d-tm" text-anchor="middle">:8080 viewer → host ephemeral port</text>
+      <text x="517" y="374" class="d-tm" text-anchor="middle">:39000–39019/tcp WebRTC mux (fixed)</text>
+      <text x="517" y="390" class="d-tm" text-anchor="middle">ephemeral/udp WebRTC mux</text>
+      <text x="517" y="409" class="d-tm" text-anchor="middle">CAP_NET_ADMIN · no-new-privileges</text>
+      <text x="517" y="425" class="d-tm" text-anchor="middle">1.5 GiB cap · removed on exit</text>
+      <text x="517" y="447" class="d-tm" text-anchor="middle">packet filter present but empty</text>
+
+      <!-- attachments -->
+      <rect x="672" y="266" width="260" height="60" class="d-box"/>
+      <text x="802" y="287" class="d-t" text-anchor="middle">/dev/videoN</text>
+      <text x="802" y="304" class="d-ts" text-anchor="middle">v4l2loopback · 4 nodes</text>
+      <text x="802" y="319" class="d-tm" text-anchor="middle">one per session · 640×480@30</text>
+
+      <rect x="672" y="338" width="260" height="56" class="d-box"/>
+      <text x="802" y="359" class="d-t" text-anchor="middle">PulseAudio</text>
+      <text x="802" y="376" class="d-ts" text-anchor="middle">unix socket · virtual sink + source</text>
+
+      <rect x="672" y="406" width="260" height="56" class="d-box"/>
+      <text x="802" y="427" class="d-t" text-anchor="middle">TURN relay</text>
+      <text x="802" y="444" class="d-ts" text-anchor="middle">:3478 tcp+udp · relay 49152–49252</text>
+
+      <path d="M650 296 H 668" class="d-line" marker-end="url(#nar0)"/>
+      <path d="M650 366 H 668" class="d-line" marker-end="url(#nar0)"/>
+      <path d="M650 434 H 668" class="d-line" marker-end="url(#nar0)"/>
+
+      <!-- egress -->
+      <rect x="368" y="500" width="580" height="130" class="d-zone"/>
+      <text x="658" y="494" class="d-tm" text-anchor="middle">Egress</text>
+      <rect x="384" y="516" width="266" height="46" class="d-box-danger"/>
+      <text x="517" y="536" class="d-t" text-anchor="middle">Actual path — direct</text>
+      <text x="517" y="552" class="d-ts" text-anchor="middle">via bridge gateway to the internet</text>
+      <rect x="384" y="574" width="266" height="46" class="d-box"/>
+      <text x="517" y="594" class="d-t" text-anchor="middle">Designed path</text>
+      <text x="517" y="610" class="d-ts" text-anchor="middle">forced through :3129 allowlist</text>
+      <rect x="672" y="540" width="260" height="56" class="d-box"/>
+      <text x="802" y="561" class="d-t" text-anchor="middle">Internet</text>
+      <text x="802" y="578" class="d-ts" text-anchor="middle">origin web servers</text>
+      <path d="M517 462 V 512" class="d-line-x" marker-end="url(#narx)"/>
+      <path d="M650 539 H 668" class="d-line-x" marker-end="url(#narx)"/>
+      <path d="M650 597 C 665 597, 665 570, 668 570" class="d-line"/>
+
+      <!-- client to host flows -->
+      <path d="M352 163 C 366 163, 370 100, 380 100" class="d-line-1"/>
+      <text x="360" y="182" class="d-tm" text-anchor="middle">:8080</text>
+
+      <defs>
+        <marker id="nar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
+        </marker>
+        <marker id="nar0" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--axis)"/>
+        </marker>
+        <marker id="narx" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--critical)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="callout warn">
+      <strong style="color:var(--text-primary)">Read the egress block at the bottom carefully.</strong>
+      The design routes container traffic through the control plane's allowlist on :3129. This
+      deployment does not — session containers sit on an ordinary Docker bridge and reach the
+      internet through its gateway directly. The red path is what actually happens; the plain
+      path is what is intended. That single difference is the gap between demonstrating the
+      architecture and enforcing it.
+    </div>
+
+    <h3 style="margin-top:34px">Component and port inventory</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:20%">Component</th>
+          <th style="width:20%">Listens / attaches</th>
+          <th style="width:14%">Protocol</th>
+          <th style="width:46%">Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Client proxy listener</strong></td><td class="mono">:8080</td><td>HTTP CONNECT + TLS bump</td><td>Every client request enters here. Terminates TLS with the enterprise CA so policy can act on the real URL, then either isolates the host or forwards it to its true origin.</td></tr>
+        <tr><td><strong>PAC distribution</strong></td><td class="mono">:8001</td><td>HTTP</td><td>Serves the proxy auto-config so endpoints can be pointed at the platform without per-machine setup.</td></tr>
+        <tr><td><strong>Egress allowlist listener</strong></td><td class="mono">:3129</td><td>HTTP proxy</td><td>The intended forced egress for session containers, permitting only hosts belonging to live sessions. Present in the design; <strong>not enforced in this profile</strong>.</td></tr>
+        <tr><td><strong>Session controller</strong></td><td class="mono">/var/run/docker.sock</td><td>Unix socket</td><td>Creates and destroys session containers, allocates their ports and camera nodes, and reaps idle ones. Socket access is equivalent to host root — front it with a scoped proxy in production.</td></tr>
+        <tr><td><strong>Session viewer</strong></td><td class="mono">:8080 → ephemeral</td><td>HTTP + WebSocket</td><td>Each container's viewer and signalling channel, published on an ephemeral host port and reverse-proxied so the client's address bar keeps showing the real site.</td></tr>
+        <tr><td><strong>WebRTC TCP multiplex</strong></td><td class="mono">:39000–39019</td><td>TCP</td><td>A <em>fixed</em> range so a client on a TCP-only path can be pre-authorised once. This is the path media actually takes here, because UDP is blocked.</td></tr>
+        <tr><td><strong>WebRTC UDP multiplex</strong></td><td class="mono">ephemeral/udp</td><td>UDP</td><td>The preferred low-latency media path. Unreachable on the measured network — zero of three probe packets arrived.</td></tr>
+        <tr><td><strong>TURN relay</strong></td><td class="mono">:3478 · 49152–49252</td><td>TCP + UDP</td><td>Last-resort media relay on one well-known port, for clients that can reach neither direct path.</td></tr>
+        <tr><td><strong>Virtual display</strong></td><td class="mono">:99</td><td>X11, in-container</td><td>The framebuffer Chromium draws into and the encoder captures from, at 1024×576@30. Never exposed outside the container.</td></tr>
+        <tr><td><strong>Virtual audio</strong></td><td class="mono">unix socket</td><td>PulseAudio</td><td>A sink whose monitor is captured for downstream audio, plus a virtual source that presents the client's microphone to the isolated browser.</td></tr>
+        <tr><td><strong>Camera loopback</strong></td><td class="mono">/dev/video0–3</td><td>V4L2, kernel</td><td>Four kernel loopback nodes; one is attached per session so Chromium enumerates an ordinary webcam. Node count is the concurrent-camera ceiling.</td></tr>
+        <tr><td><strong>Container network</strong></td><td class="mono">172.17.0.0/16</td><td>Bridge</td><td>Gateway 172.17.0.1, embedded DNS at 127.0.0.11. An ordinary bridge with internet reachability — the design calls for an internal network with no gateway.</td></tr>
+        <tr><td><strong>In-container packet filter</strong></td><td class="mono">nftables</td><td>Netfilter</td><td>Intended default-deny egress permitting only the proxy, DNS and media ports. The ruleset is currently empty.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
 <!-- ============ SECURITY ============ -->
 <section id="security">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">07 — Security model</div>
+      <div class="sec-num">08 — Security model</div>
       <h2>Independent layers, each assuming the others failed</h2>
       <p>
         No single control is load-bearing. The design question for each layer is what it still
@@ -893,7 +1058,7 @@
 <section id="perf">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">08 — Measured performance</div>
+      <div class="sec-num">09 — Measured performance</div>
       <h2>Numbers from this deployment</h2>
       <p>
         Everything in this section was measured on the host described at the foot of the page.
@@ -1191,7 +1356,7 @@
 <section id="workloads">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">09 — Workload validation</div>
+      <div class="sec-num">10 — Workload validation</div>
       <h2>What has been exercised, and what has not</h2>
       <p>
         Isolation is easy to demonstrate on a static page and hard on a real application. All
@@ -1260,7 +1425,7 @@
 <section id="env" style="border-bottom:none">
   <div class="wrap">
     <div class="sec-head">
-      <div class="sec-num">10 — Test environment</div>
+      <div class="sec-num">11 — Test environment</div>
       <h2>Where these numbers came from</h2>
       <p>
         A single mid-range server, not a tuned benchmark rig. Figures scale with the host;
