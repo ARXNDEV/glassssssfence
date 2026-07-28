@@ -1,0 +1,1370 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glass Fence — Remote Browser Isolation</title>
+<style>
+  /* ---- palette: validated categorical slots 1-4 + status, both modes ---- */
+  :root {
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface-1:#1a1a19; --surface-2:#141413;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --seq-100:#184f95; --seq-400:#3987e5;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --plane:#f9f9f7; --surface-1:#fcfcfb; --surface-2:#f4f3f0;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --seq-100:#cde2fb; --seq-400:#3987e5;
+  }
+
+  * { box-sizing:border-box; }
+  /* offset anchor targets so a jumped-to heading clears the sticky nav */
+  html { scroll-behavior:smooth; scroll-padding-top:76px; }
+  body {
+    margin:0; background:var(--plane); color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4 { line-height:1.25; margin:0; font-weight:600; letter-spacing:-0.015em; }
+  h2 { font-size:1.6rem; margin-bottom:.4rem; }
+  h3 { font-size:1.1rem; margin-bottom:.5rem; }
+  p { margin:0 0 1rem; color:var(--text-secondary); max-width:74ch; }
+  a { color:var(--s1); }
+  code, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; }
+
+  .wrap { max-width:1140px; margin:0 auto; padding:0 32px; }
+
+  /* ---- nav ---- */
+  nav {
+    /* Opaque on purpose: a translucent bar with backdrop-filter ghosted the hero
+       text through itself at the top of the page, and it prints badly. */
+    position:sticky; top:0; z-index:50; background:var(--plane);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-in { display:flex; align-items:center; gap:28px; height:60px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:-0.02em; }
+  .brand-mark { width:22px; height:22px; flex:none; }
+  .nav-links { display:flex; gap:22px; margin-left:auto; flex-wrap:wrap; }
+  .nav-links a {
+    color:var(--text-secondary); text-decoration:none; font-size:.85rem;
+    padding:4px 0; border-bottom:2px solid transparent;
+  }
+  .nav-links a:hover { color:var(--text-primary); border-bottom-color:var(--s1); }
+  .theme-btn {
+    background:var(--surface-1); color:var(--text-secondary); border:1px solid var(--border);
+    border-radius:8px; padding:6px 12px; font:inherit; font-size:.8rem; cursor:pointer;
+  }
+  .theme-btn:hover { color:var(--text-primary); }
+
+  /* ---- hero ---- */
+  header.hero { padding:88px 0 64px; border-bottom:1px solid var(--border); }
+  .eyebrow {
+    font-size:.75rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--text-muted); margin-bottom:20px;
+  }
+  header.hero h1 { font-size:clamp(2.2rem,5vw,3.4rem); max-width:22ch; }
+  .lede { font-size:1.15rem; max-width:64ch; margin-top:20px; color:var(--text-secondary); }
+  .hero-figure {
+    font-size:clamp(3rem,7vw,4.5rem); font-weight:600; letter-spacing:-0.03em;
+    line-height:1; margin-top:44px; color:var(--text-primary);
+  }
+  .hero-figure-cap { color:var(--text-secondary); font-size:.95rem; max-width:44ch; margin-top:10px; }
+
+  /* ---- sections ---- */
+  section { padding:72px 0; border-bottom:1px solid var(--border); }
+  .sec-head { margin-bottom:36px; }
+  .sec-num {
+    font-size:.75rem; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--s1); margin-bottom:10px; font-weight:600;
+  }
+
+  /* ---- cards & grids ---- */
+  .grid { display:grid; gap:18px; }
+  .g2 { grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .g3 { grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+  .g4 { grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
+  .card {
+    background:var(--surface-1); border:1px solid var(--border);
+    border-radius:14px; padding:22px 24px;
+  }
+  .card h3 { display:flex; align-items:center; gap:9px; }
+
+  /* ---- stat tiles ---- */
+  .tile-label { font-size:.82rem; color:var(--text-secondary); margin-bottom:8px; }
+  .tile-value { font-size:2rem; font-weight:600; letter-spacing:-0.02em; line-height:1.1; }
+  .tile-unit { font-size:.95rem; font-weight:400; color:var(--text-secondary); margin-left:3px; }
+  .tile-delta { font-size:.8rem; margin-top:8px; display:flex; align-items:center; gap:6px; }
+  .tile-note { font-size:.75rem; color:var(--text-muted); margin-top:8px; }
+  .delta-good { color:var(--good); }
+
+  /* ---- charts (plain HTML bars) ---- */
+  /* right gutter so a direct label on a near-full-width bar has room to sit
+     outside the mark instead of colliding with the card edge. Padding applies to
+     the tick row too, so labels and ticks stay aligned. */
+  .chart { margin-top:6px; padding-right:64px; }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; margin-bottom:18px; }
+  .legend-item { display:flex; align-items:center; gap:7px; font-size:.82rem; color:var(--text-secondary); }
+  .swatch { width:11px; height:11px; border-radius:3px; flex:none; }
+  .row { display:grid; grid-template-columns:minmax(120px,180px) 1fr; gap:14px; align-items:center; margin-bottom:12px; }
+  .row-label { font-size:.85rem; color:var(--text-secondary); text-align:right; }
+  .track { position:relative; height:20px; background:transparent; }
+  .track::before {
+    content:""; position:absolute; inset:0; border-left:1px solid var(--axis);
+  }
+  .bar {
+    height:20px; border-radius:0 4px 4px 0; position:relative; cursor:pointer;
+    display:flex; align-items:center; transition:filter .12s;
+  }
+  .bar:hover { filter:brightness(1.12); }
+  .bar-val {
+    position:absolute; left:calc(100% + 9px); font-size:.8rem; color:var(--text-primary);
+    white-space:nowrap; font-weight:500;
+  }
+  /* stacked */
+  .stack { display:flex; height:22px; align-items:stretch; }
+  .seg { position:relative; cursor:pointer; transition:filter .12s; }
+  .seg:hover { filter:brightness(1.14); }
+  .seg:not(:last-child) { margin-right:2px; } /* 2px surface gap */
+  .seg:first-child { border-radius:4px 0 0 4px; }
+  .seg:last-child { border-radius:0 4px 4px 0; }
+  .axis-row {
+    display:grid; grid-template-columns:minmax(120px,180px) 1fr; gap:14px;
+    margin-top:6px; font-size:.72rem; color:var(--text-muted);
+  }
+  .axis-ticks { display:flex; justify-content:space-between; font-variant-numeric:tabular-nums; }
+
+  /* ---- tooltip ---- */
+  #tip {
+    position:fixed; z-index:99; pointer-events:none; opacity:0; transition:opacity .1s;
+    background:var(--surface-1); border:1px solid var(--border); border-radius:9px;
+    padding:9px 12px; font-size:.8rem; box-shadow:0 8px 28px rgba(0,0,0,.35); max-width:280px;
+  }
+  #tip strong { display:block; color:var(--text-primary); margin-bottom:3px; }
+  #tip span { color:var(--text-secondary); }
+
+  /* ---- tables ---- */
+  details.tv { margin-top:22px; }
+  details.tv summary {
+    cursor:pointer; font-size:.8rem; color:var(--text-secondary);
+    padding:7px 0; list-style:none;
+  }
+  details.tv summary::-webkit-details-marker { display:none; }
+  details.tv summary::before { content:"▸ "; color:var(--text-muted); }
+  details.tv[open] summary::before { content:"▾ "; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; margin-top:10px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--border); }
+  th { color:var(--text-secondary); font-weight:600; font-size:.78rem; letter-spacing:.02em; }
+  td { color:var(--text-secondary); }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  td strong { color:var(--text-primary); font-weight:500; }
+
+  /* ---- status chips (icon + label, never colour alone) ---- */
+  .chip {
+    display:inline-flex; align-items:center; gap:6px; font-size:.74rem; font-weight:500;
+    padding:3px 9px; border-radius:99px; border:1px solid var(--border);
+    background:var(--surface-2); white-space:nowrap;
+  }
+  .chip svg { width:12px; height:12px; flex:none; }
+  .chip.ok    { color:var(--good); }
+  .chip.warn  { color:var(--warning); }
+  .chip.block { color:var(--critical); }
+  .chip.info  { color:var(--text-secondary); }
+
+  /* ---- diagrams ---- */
+  .diagram { width:100%; height:auto; display:block; margin:8px 0 4px; overflow:visible; }
+  .d-box { fill:var(--surface-2); stroke:var(--axis); stroke-width:1; rx:8; }
+  .d-box-accent { fill:color-mix(in srgb, var(--s1) 14%, var(--surface-2)); stroke:var(--s1); stroke-width:1; rx:8; }
+  .d-box-danger { fill:color-mix(in srgb, var(--critical) 12%, var(--surface-2)); stroke:var(--critical); stroke-width:1; rx:8; }
+  .d-zone { fill:none; stroke:var(--grid); stroke-width:1; rx:12; }
+  .d-t  { fill:var(--text-primary); font:500 12px system-ui,sans-serif; }
+  .d-ts { fill:var(--text-secondary); font:400 10.5px system-ui,sans-serif; }
+  .d-tm { fill:var(--text-muted); font:400 10px system-ui,sans-serif; }
+  .d-line { stroke:var(--axis); stroke-width:1.5; fill:none; }
+  .d-line-1 { stroke:var(--s1); stroke-width:2; fill:none; }
+  .d-line-3 { stroke:var(--s3); stroke-width:2; fill:none; }
+  .d-line-x { stroke:var(--critical); stroke-width:1.5; fill:none; stroke-dasharray:4 3; }
+
+  .callout {
+    border-left:2px solid var(--s1); padding:2px 0 2px 18px; margin:22px 0;
+    color:var(--text-secondary); font-size:.95rem;
+  }
+  .callout.warn { border-left-color:var(--warning); }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 18px; font-size:.85rem; }
+  .kv dt { color:var(--text-muted); }
+  .kv dd { margin:0; color:var(--text-primary); }
+  ul.tight { margin:0 0 1rem; padding-left:20px; color:var(--text-secondary); }
+  ul.tight li { margin-bottom:7px; max-width:72ch; }
+  footer { padding:44px 0 64px; color:var(--text-muted); font-size:.82rem; }
+  .prov { font-size:.75rem; color:var(--text-muted); margin-top:14px; font-style:italic; }
+  @media print { nav, .theme-btn { display:none; } body { background:#fff; } }
+</style>
+</head>
+<body>
+
+<div id="tip" role="tooltip"></div>
+
+<nav>
+  <div class="wrap nav-in">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="19" height="19" rx="5" fill="none" stroke="var(--s1)" stroke-width="1.6"/>
+        <path d="M8 8v8M12 8v8M16 8v8" stroke="var(--s1)" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+        <circle cx="12" cy="12" r="2.6" fill="var(--s1)"/>
+      </svg>
+      Glass Fence
+    </div>
+    <div class="nav-links">
+      <a href="#what">Overview</a>
+      <a href="#session">Session</a>
+      <a href="#streaming">Streaming</a>
+      <a href="#audio">Audio</a>
+      <a href="#camera">Camera</a>
+      <a href="#webrtc">Transport</a>
+      <a href="#security">Security</a>
+      <a href="#perf">Performance</a>
+      <a href="#workloads">Workloads</a>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button">Light</button>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Accops · Remote Browser Isolation</div>
+    <h1>The web renders somewhere else. Only pixels reach the user.</h1>
+    <p class="lede">
+      Glass Fence intercepts a user's HTTPS request and answers it with a live video stream
+      instead of a web page. The real browsing happens inside a single-use container that is
+      destroyed the moment the user disconnects. Nothing executable ever reaches the endpoint.
+      The containment layers around that container, and which of them are switched on in this
+      deployment, are set out precisely in <a href="#security">section 07</a>.
+    </p>
+    <div class="hero-figure">0 bytes</div>
+    <div class="hero-figure-cap">
+      of remote page content executes on the user's device. Web content is decoded to
+      pixels and Opus audio inside the isolation container.
+    </div>
+  </div>
+</header>
+
+<!-- ============ WHAT IT IS ============ -->
+<section id="what">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">01 — Overview</div>
+      <h2>What the product does</h2>
+      <p>
+        Traditional web filtering makes a binary choice: allow a site and accept its code, or
+        block it and break the user's work. Isolation removes the choice. The site is allowed
+        to run — just not anywhere that matters.
+      </p>
+    </div>
+
+    <div class="grid g3">
+      <div class="card">
+        <h3>Interception, not installation</h3>
+        <p style="margin:0">
+          The user points their browser's proxy at Glass Fence. TLS is terminated with an
+          enterprise CA, so the platform sees the request in the clear and decides per host
+          whether to isolate. No agent, no plugin, no extension on the endpoint.
+        </p>
+      </div>
+      <div class="card">
+        <h3>One session, one destination</h3>
+        <p style="margin:0">
+          Each isolated request gets its own freshly created container, pinned by managed
+          browser policy to a single allowed host. There is no shared browser, no shared
+          profile and no shared cache between users.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Destroyed, not cleaned</h3>
+        <p style="margin:0">
+          Sessions are not sanitised and reused — the container is deleted. Anything a site
+          dropped on disk, in storage or in memory goes with it. The next visit starts from
+          the image, byte-identical.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout">
+      The security boundary is a process and network boundary, not a parser. It does not
+      depend on recognising malicious content — which is why it holds against content that
+      no signature or heuristic has seen before.
+    </div>
+  </div>
+</section>
+
+<!-- ============ SESSION LIFECYCLE ============ -->
+<section id="session">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">02 — Session lifecycle</div>
+      <h2>What happens between the click and the pixels</h2>
+      <p>
+        Five stages. The first four complete before the user sees anything; the fifth is what
+        makes the model defensible.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 300" role="img"
+         aria-label="Session lifecycle: user request enters the proxy, which decides whether to isolate, launches a container, streams it back over WebRTC, and destroys it on disconnect.">
+      <rect x="1" y="60" width="180" height="112" class="d-box"/>
+      <text x="91" y="102" class="d-t" text-anchor="middle">User browser</text>
+      <text x="91" y="120" class="d-ts" text-anchor="middle">proxy → :8080</text>
+      <text x="91" y="137" class="d-tm" text-anchor="middle">no agent installed</text>
+
+      <rect x="238" y="26" width="300" height="230" class="d-zone"/>
+      <text x="388" y="18" class="d-tm" text-anchor="middle">Glass Fence control plane</text>
+      <rect x="256" y="44" width="264" height="62" class="d-box-accent"/>
+      <text x="388" y="68" class="d-t" text-anchor="middle">TLS termination + policy</text>
+      <text x="388" y="86" class="d-ts" text-anchor="middle">isolate this host? · content filter</text>
+      <rect x="256" y="122" width="264" height="56" class="d-box"/>
+      <text x="388" y="145" class="d-t" text-anchor="middle">Session controller</text>
+      <text x="388" y="162" class="d-ts" text-anchor="middle">docker run / docker rm</text>
+      <rect x="256" y="194" width="264" height="46" class="d-box"/>
+      <text x="388" y="215" class="d-t" text-anchor="middle">Idle reaper</text>
+      <text x="388" y="231" class="d-ts" text-anchor="middle">destroys unattended sessions</text>
+
+      <rect x="596" y="26" width="290" height="230" class="d-zone"/>
+      <text x="741" y="18" class="d-tm" text-anchor="middle">Isolation container (single use)</text>
+      <rect x="614" y="44" width="254" height="58" class="d-box-accent"/>
+      <text x="741" y="67" class="d-t" text-anchor="middle">Chromium — kiosk</text>
+      <text x="741" y="84" class="d-ts" text-anchor="middle">locked to one host by policy</text>
+      <rect x="614" y="118" width="254" height="52" class="d-box"/>
+      <text x="741" y="139" class="d-t" text-anchor="middle">X display + capture</text>
+      <text x="741" y="156" class="d-ts" text-anchor="middle">encode to VP8 + Opus</text>
+      <rect x="614" y="186" width="254" height="54" class="d-box"/>
+      <text x="741" y="207" class="d-t" text-anchor="middle">In-container firewall</text>
+      <text x="741" y="224" class="d-ts" text-anchor="middle">default-deny egress</text>
+
+      <rect x="944" y="60" width="134" height="112" class="d-box"/>
+      <text x="1011" y="96" class="d-t" text-anchor="middle">Internet</text>
+      <text x="1011" y="114" class="d-ts" text-anchor="middle">reached only</text>
+      <text x="1011" y="129" class="d-ts" text-anchor="middle">via the proxy</text>
+
+      <path d="M181 100 H 250" class="d-line-1" marker-end="url(#ar1)"/>
+      <path d="M250 132 H 181" class="d-line-1" marker-end="url(#ar1)"/>
+      <text x="215" y="92" class="d-tm" text-anchor="middle">request</text>
+      <text x="215" y="152" class="d-tm" text-anchor="middle">stream</text>
+      <path d="M520 150 H 608" class="d-line" marker-end="url(#ar0)"/>
+      <text x="564" y="142" class="d-tm" text-anchor="middle">launch</text>
+      <path d="M868 72 H 938" class="d-line-x"/>
+      <text x="903" y="64" class="d-tm" text-anchor="middle">blocked</text>
+      <path d="M614 210 C 560 260, 300 268, 388 244" class="d-line-3"/>
+      <defs>
+        <marker id="ar1" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
+        </marker>
+        <marker id="ar0" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--axis)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="grid g4" style="margin-top:30px">
+      <div class="card">
+        <div class="tile-label">1 · Intercept</div>
+        <p style="font-size:.85rem;margin:0">
+          Request arrives at the proxy. TLS is terminated with the enterprise CA, so policy
+          can act on the real URL rather than an opaque tunnel.
+        </p>
+      </div>
+      <div class="card">
+        <div class="tile-label">2 · Decide</div>
+        <p style="font-size:.85rem;margin:0">
+          The host is matched against the isolation list. Non-isolated traffic is filtered and
+          forwarded normally — isolation is selective, not all-or-nothing.
+        </p>
+      </div>
+      <div class="card">
+        <div class="tile-label">3 · Launch</div>
+        <p style="font-size:.85rem;margin:0">
+          A container is created, pinned to that one host, and reports healthy in about ten
+          seconds. Sessions for the same host are reused while active.
+        </p>
+      </div>
+      <div class="card">
+        <div class="tile-label">4 · Stream</div>
+        <p style="font-size:.85rem;margin:0">
+          The user's original tab is answered with a viewer that plays the container's screen
+          and sound. The address bar still shows the real site.
+        </p>
+      </div>
+      <div class="card">
+        <div class="tile-label">5 · Destroy</div>
+        <p style="font-size:.85rem;margin:0">
+          On disconnect the container is removed with <span class="mono">--rm</span>. An idle
+          reaper collects anything left unattended.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STREAMING ============ -->
+<section id="streaming">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">03 — Streaming architecture</div>
+      <h2>How a screen becomes a stream</h2>
+      <p>
+        The pixel path is a GStreamer pipeline feeding a WebRTC sender. Every stage is chosen
+        for time-to-photon rather than file-size efficiency — this is an interactive desktop,
+        not a video on demand.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 190" role="img"
+         aria-label="Streaming pipeline: X display captured on damage, converted, held in a leaky one-deep queue, VP8 encoded in realtime, packetised to WebRTC and decoded by the client.">
+      <g>
+        <rect x="1"   y="42" width="150" height="72" class="d-box"/>
+        <text x="76"  y="72"  class="d-t"  text-anchor="middle">X display</text>
+        <text x="76"  y="90"  class="d-ts" text-anchor="middle">1024×576 @ 30</text>
+
+        <rect x="187" y="42" width="150" height="72" class="d-box-accent"/>
+        <text x="262" y="66"  class="d-t"  text-anchor="middle">Capture</text>
+        <text x="262" y="83"  class="d-ts" text-anchor="middle">on damage only</text>
+        <text x="262" y="99"  class="d-tm" text-anchor="middle">idle costs nothing</text>
+
+        <rect x="373" y="42" width="150" height="72" class="d-box"/>
+        <text x="448" y="66"  class="d-t"  text-anchor="middle">Queue · depth 1</text>
+        <text x="448" y="83"  class="d-ts" text-anchor="middle">leaky downstream</text>
+        <text x="448" y="99"  class="d-tm" text-anchor="middle">drops stale frames</text>
+
+        <rect x="559" y="42" width="150" height="72" class="d-box-accent"/>
+        <text x="634" y="66"  class="d-t"  text-anchor="middle">VP8 encode</text>
+        <text x="634" y="83"  class="d-ts" text-anchor="middle">realtime · no lookahead</text>
+        <text x="634" y="99"  class="d-tm" text-anchor="middle">2 Mbps CBR</text>
+
+        <rect x="745" y="42" width="150" height="72" class="d-box"/>
+        <text x="820" y="66"  class="d-t"  text-anchor="middle">WebRTC sender</text>
+        <text x="820" y="83"  class="d-ts" text-anchor="middle">RTP + congestion ctl</text>
+
+        <rect x="931" y="42" width="148" height="72" class="d-box"/>
+        <text x="1005" y="72" class="d-t"  text-anchor="middle">Client decode</text>
+        <text x="1005" y="90" class="d-ts" text-anchor="middle">browser, no plugin</text>
+
+        <path d="M151 78 H 181" class="d-line-1" marker-end="url(#ar1b)"/>
+        <path d="M337 78 H 367" class="d-line-1" marker-end="url(#ar1b)"/>
+        <path d="M523 78 H 553" class="d-line-1" marker-end="url(#ar1b)"/>
+        <path d="M709 78 H 739" class="d-line-1" marker-end="url(#ar1b)"/>
+        <path d="M895 78 H 925" class="d-line-1" marker-end="url(#ar1b)"/>
+        <text x="540" y="152" class="d-tm" text-anchor="middle">keyframe every 2 s — bounds worst-case time-to-first-picture for a joining viewer</text>
+      </g>
+      <defs>
+        <marker id="ar1b" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="grid g2" style="margin-top:30px">
+      <div class="card">
+        <h3>Three decisions that define the feel</h3>
+        <ul class="tight" style="margin-bottom:0">
+          <li><strong style="color:var(--text-primary)">Capture only what changed.</strong>
+            The encoder is driven by X damage events, so a static page costs almost no CPU.
+            Measured idle draw is under a fifth of one core.</li>
+          <li><strong style="color:var(--text-primary)">Never encode a stale frame.</strong>
+            The queue is one frame deep and drops the old one rather than the new one. Under
+            load the picture degrades; it does not fall behind.</li>
+          <li><strong style="color:var(--text-primary)">Keep keyframes frequent.</strong>
+            A viewer cannot decode anything until its first keyframe, so the 2-second interval
+            is a correctness requirement, not a bandwidth setting.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Quality is a deliberate trade, and it is tunable</h3>
+        <p>
+          Bitrate, resolution, frame rate, encoder speed and the quantiser floor are all
+          runtime settings — no rebuild. On a constrained network the same session can be
+          re-pointed toward responsiveness or toward sharpness in about forty seconds.
+        </p>
+        <dl class="kv">
+          <dt>Resolution</dt><dd>1024×576 @ 30 fps</dd>
+          <dt>Video</dt><dd>VP8, 2 Mbps CBR</dd>
+          <dt>Rate buffer</dt><dd>120 ms</dd>
+          <dt>Codec option</dt><dd>H.264 available for hardware-decoding clients</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ AUDIO ============ -->
+<section id="audio">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">04 — Audio architecture</div>
+      <h2>Sound, in both directions</h2>
+      <p>
+        Audio is a separate encoded track, not part of the video. The container has no sound
+        hardware, so the platform gives it virtual devices — which is also what lets the
+        user's microphone appear inside the isolated browser.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 260" role="img"
+         aria-label="Audio path: Chromium plays into a virtual sink whose monitor is captured and Opus encoded to the client; the client microphone is fed back in as a virtual source.">
+      <text x="16" y="16" class="d-tm">Downstream — container sound to the user</text>
+      <rect x="1"   y="28" width="152" height="62" class="d-box"/>
+      <text x="77"  y="54"  class="d-t"  text-anchor="middle">Chromium</text>
+      <text x="77"  y="71"  class="d-ts" text-anchor="middle">page audio</text>
+
+      <rect x="196" y="28" width="176" height="62" class="d-box-accent"/>
+      <text x="284" y="52"  class="d-t"  text-anchor="middle">Virtual sink</text>
+      <text x="284" y="69"  class="d-ts" text-anchor="middle">no hardware present</text>
+
+      <rect x="415" y="28" width="176" height="62" class="d-box"/>
+      <text x="503" y="52"  class="d-t"  text-anchor="middle">Monitor capture</text>
+      <text x="503" y="69"  class="d-ts" text-anchor="middle">taps the sink output</text>
+
+      <rect x="634" y="28" width="176" height="62" class="d-box-accent"/>
+      <text x="722" y="46"  class="d-t"  text-anchor="middle">Opus encode</text>
+      <text x="722" y="63"  class="d-ts" text-anchor="middle">128 kbps · 20 ms frames</text>
+      <text x="722" y="79"  class="d-tm" text-anchor="middle">no DTX, no lossy queue</text>
+
+      <rect x="853" y="28" width="226" height="62" class="d-box"/>
+      <text x="966" y="54"  class="d-t"  text-anchor="middle">WebRTC audio track</text>
+      <text x="966" y="71"  class="d-ts" text-anchor="middle">separate from video</text>
+
+      <path d="M153 59 H 190" class="d-line-1" marker-end="url(#ar1c)"/>
+      <path d="M372 59 H 409" class="d-line-1" marker-end="url(#ar1c)"/>
+      <path d="M591 59 H 628" class="d-line-1" marker-end="url(#ar1c)"/>
+      <path d="M810 59 H 847" class="d-line-1" marker-end="url(#ar1c)"/>
+
+      <text x="16" y="150" class="d-tm">Upstream — user microphone into the isolated browser</text>
+      <rect x="1"   y="162" width="152" height="62" class="d-box"/>
+      <text x="77"  y="188" class="d-t"  text-anchor="middle">User microphone</text>
+      <text x="77"  y="205" class="d-ts" text-anchor="middle">browser capture</text>
+
+      <rect x="196" y="162" width="176" height="62" class="d-box"/>
+      <text x="284" y="188" class="d-t"  text-anchor="middle">WebRTC inbound</text>
+      <text x="284" y="205" class="d-ts" text-anchor="middle">client → container</text>
+
+      <rect x="415" y="162" width="176" height="62" class="d-box-accent"/>
+      <text x="503" y="188" class="d-t"  text-anchor="middle">Virtual source</text>
+      <text x="503" y="205" class="d-ts" text-anchor="middle">userspace device</text>
+
+      <rect x="634" y="162" width="445" height="62" class="d-box"/>
+      <text x="856" y="188" class="d-t"  text-anchor="middle">Chromium sees a normal microphone</text>
+      <text x="856" y="205" class="d-ts" text-anchor="middle">conferencing sites work without host audio configuration</text>
+
+      <path d="M153 193 H 190" class="d-line-3" marker-end="url(#ar3c)"/>
+      <path d="M372 193 H 409" class="d-line-3" marker-end="url(#ar3c)"/>
+      <path d="M591 193 H 628" class="d-line-3" marker-end="url(#ar3c)"/>
+      <defs>
+        <marker id="ar1c" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s1)"/>
+        </marker>
+        <marker id="ar3c" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s3)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="callout warn">
+      <strong style="color:var(--text-primary)">Two settings in this path are correctness
+      issues, not tuning knobs.</strong> A lossy queue anywhere on the audio path discards
+      samples, and the receiver then accelerates playback to catch up to the clock — audible as
+      sound cutting out and replaying fast. Discontinuous transmission produces the same
+      artefact on quiet passages. Both are disabled. Video may drop frames; audio may not.
+    </div>
+  </div>
+</section>
+
+<!-- ============ CAMERA ============ -->
+<section id="camera">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">05 — Camera architecture</div>
+      <h2>Giving an isolated browser a webcam</h2>
+      <p>
+        A microphone can be synthesised entirely in userspace. A camera cannot — Chromium
+        enumerates video devices through the kernel, so the platform has to present a real
+        device node that is fed from the network.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 210" role="img"
+         aria-label="Camera path: the client camera track arrives over WebRTC, is written into a kernel loopback video device on the host, mounted into the container, and enumerated by Chromium as a webcam.">
+      <rect x="1"   y="56" width="168" height="70" class="d-box"/>
+      <text x="85"  y="84"  class="d-t"  text-anchor="middle">User camera</text>
+      <text x="85"  y="101" class="d-ts" text-anchor="middle">browser capture</text>
+
+      <rect x="209" y="56" width="176" height="70" class="d-box"/>
+      <text x="297" y="84"  class="d-t"  text-anchor="middle">WebRTC video in</text>
+      <text x="297" y="101" class="d-ts" text-anchor="middle">640×480</text>
+
+      <rect x="425" y="56" width="196" height="70" class="d-box-accent"/>
+      <text x="523" y="78"  class="d-t"  text-anchor="middle">Kernel loopback device</text>
+      <text x="523" y="95"  class="d-ts" text-anchor="middle">v4l2loopback on the host</text>
+      <text x="523" y="111" class="d-tm" text-anchor="middle">host prerequisite</text>
+
+      <rect x="661" y="56" width="176" height="70" class="d-box"/>
+      <text x="749" y="84"  class="d-t"  text-anchor="middle">Mounted into session</text>
+      <text x="749" y="101" class="d-ts" text-anchor="middle">per-container device</text>
+
+      <rect x="877" y="56" width="202" height="70" class="d-box-accent"/>
+      <text x="978" y="78"  class="d-t"  text-anchor="middle">Chromium</text>
+      <text x="978" y="95"  class="d-ts" text-anchor="middle">sees an ordinary webcam</text>
+      <text x="978" y="111" class="d-tm" text-anchor="middle">policy-gated per site</text>
+
+      <path d="M169 91 H 203" class="d-line-3" marker-end="url(#ar3d)"/>
+      <path d="M385 91 H 419" class="d-line-3" marker-end="url(#ar3d)"/>
+      <path d="M621 91 H 655" class="d-line-3" marker-end="url(#ar3d)"/>
+      <path d="M837 91 H 871" class="d-line-3" marker-end="url(#ar3d)"/>
+      <text x="540" y="178" class="d-tm" text-anchor="middle">
+        Camera imagery makes a full round trip — in over the network, then back out inside the screen stream.
+      </text>
+      <defs>
+        <marker id="ar3d" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0 0 L7 3.5 L0 7 z" fill="var(--s3)"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="grid g3" style="margin-top:26px">
+      <div class="card">
+        <div class="tile-label">Device as seen by the isolated browser</div>
+        <div class="tile-value" style="font-size:1.5rem">640×480</div>
+        <div class="tile-note">Enumerated as an ordinary VGA webcam, planar YUV, advertising 30 fps.</div>
+      </div>
+      <div class="card">
+        <div class="tile-label">Delivered frame rate</div>
+        <div class="tile-value">30<span class="tile-unit">fps</span></div>
+        <div class="tile-delta delta-good">
+          <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V4M4.2 7.8L8 4l3.8 3.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          up from 1 fps
+        </div>
+        <div class="tile-note">Full device rate, once each session had its own loopback node.</div>
+      </div>
+      <div class="card">
+        <div class="tile-label">Simultaneous camera sessions</div>
+        <div class="tile-value">4</div>
+        <div class="tile-note">One per provisioned loopback node. Raise the node count to raise this.</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong style="color:var(--text-primary)">A loopback node cannot be shared, and getting
+      this wrong costs you 97% of your frame rate.</strong> Every session was originally handed
+      the same device. A v4l2loopback node has one frame slot and a shallow buffer, so
+      concurrent writers interleave and each reader sees a fraction of the frames — measured at
+      <strong>1 fps in the isolated browser while the device itself advertised 30</strong>.
+      Sessions now claim a distinct node and release it on teardown, and the camera runs at the
+      <strong>full 30 fps</strong>. The reservation is also self-healing: a container removed
+      out-of-band would otherwise strand its node and silently leave every later session without
+      a camera.
+      <br><br>
+      The consequence for capacity planning is simple and easy to miss: <strong>the number of
+      loopback nodes provisioned on the host is the number of simultaneous camera users.</strong>
+      This host runs four. It is a one-line kernel-module setting, it is not persistent across
+      reboot, and it must be sized deliberately rather than left at the default of one.
+    </div>
+
+    <div class="grid g2" style="margin-top:26px">
+      <div class="card">
+        <h3>Why camera latency is structural</h3>
+        <p style="margin:0">
+          The user's own face is not composited locally. It travels to the container, is
+          decoded, drawn into the virtual display, re-encoded as part of the screen, and sent
+          back. That is a full network round trip plus an extra decode and encode — so camera
+          self-view will always lag more than the rest of the picture. Reducing the camera
+          resolution shortens the path; it cannot remove the round trip.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Operational note</h3>
+        <p style="margin:0">
+          The loopback device is a host kernel module and is not persistent across reboot. It
+          must be loaded before the control plane starts, because device presence is detected
+          at startup. Where it is absent, sessions run microphone-only and the camera is
+          silently unavailable — worth an explicit health check in production.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRANSPORT ============ -->
+<section id="webrtc">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">06 — Transport</div>
+      <h2>Getting media across a hostile network</h2>
+      <p>
+        WebRTC prefers UDP. Enterprise and public networks frequently do not permit it. The
+        platform therefore ships three transport paths and negotiates whichever the client can
+        actually use — this is the difference between working everywhere and demoing well.
+      </p>
+    </div>
+
+    <svg class="diagram" viewBox="0 0 1080 250" role="img"
+         aria-label="Three media paths: direct UDP, TCP multiplex fallback, and TURN relay. On the measured network UDP is blocked, so TCP multiplex carries the media.">
+      <rect x="1" y="80" width="160" height="86" class="d-box"/>
+      <text x="81" y="116" class="d-t" text-anchor="middle">Viewer</text>
+      <text x="81" y="134" class="d-ts" text-anchor="middle">any modern browser</text>
+
+      <rect x="880" y="80" width="199" height="86" class="d-box"/>
+      <text x="979" y="116" class="d-t" text-anchor="middle">Session container</text>
+      <text x="979" y="134" class="d-ts" text-anchor="middle">media sender</text>
+
+      <rect x="286" y="14" width="470" height="50" class="d-box"/>
+      <text x="521" y="34" class="d-t" text-anchor="middle">Path 1 — direct UDP</text>
+      <text x="521" y="52" class="d-ts" text-anchor="middle">lowest latency · late packets are simply dropped</text>
+
+      <rect x="286" y="98" width="470" height="50" class="d-box-accent"/>
+      <text x="521" y="118" class="d-t" text-anchor="middle">Path 2 — TCP multiplex</text>
+      <text x="521" y="136" class="d-ts" text-anchor="middle">single fixed port · survives UDP-blocking networks</text>
+
+      <rect x="286" y="182" width="470" height="50" class="d-box"/>
+      <text x="521" y="202" class="d-t" text-anchor="middle">Path 3 — TURN relay</text>
+      <text x="521" y="220" class="d-ts" text-anchor="middle">one well-known port for the most restricted clients</text>
+
+      <path d="M161 108 C 220 108, 230 39, 280 39" class="d-line"/>
+      <path d="M762 39 C 812 39, 822 108, 874 108" class="d-line"/>
+      <path d="M161 123 H 280" class="d-line-1"/>
+      <path d="M762 123 H 874" class="d-line-1"/>
+      <path d="M161 138 C 220 138, 230 207, 280 207" class="d-line"/>
+      <path d="M762 207 C 812 207, 822 138, 874 138" class="d-line"/>
+
+      <text x="521" y="80" class="d-tm" text-anchor="middle">↑ unavailable on the measured network</text>
+    </svg>
+
+    <div class="grid g3" style="margin-top:30px">
+      <div class="card">
+        <div class="tile-label">Measured inbound UDP reachability</div>
+        <div class="tile-value">0<span class="tile-unit">of 3 ports</span></div>
+        <div class="tile-note">Probed from a real client network. No datagrams arrived on any port.</div>
+      </div>
+      <div class="card">
+        <div class="tile-label">Measured round-trip time to host</div>
+        <div class="tile-value">45<span class="tile-unit">ms</span></div>
+        <div class="tile-note">Mean of 5 ICMP samples, 0% loss. Sets the floor on interaction feedback.</div>
+      </div>
+      <div class="card">
+        <div class="tile-label">Negotiated transport</div>
+        <div class="tile-value" style="font-size:1.5rem">TCP multiplex</div>
+        <div class="tile-note">Media fell back automatically. The user saw a working session, not an error.</div>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong style="color:var(--text-primary)">Read this honestly.</strong> A reliable,
+      ordered transport cannot discard a late packet, so a delayed frame holds up everything
+      behind it — including audio, which shares the connection. On a UDP-blocked path with
+      45&nbsp;ms of round-trip time, roughly 90&nbsp;ms of interaction feedback delay is
+      arithmetic, not a defect. Opening a single inbound UDP port improves interactivity more
+      than any encoder setting available.
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section id="security">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">07 — Security model</div>
+      <h2>Independent layers, each assuming the others failed</h2>
+      <p>
+        No single control is load-bearing. The design question for each layer is what it still
+        prevents once everything above it has been defeated.
+      </p>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:20%">Layer</th>
+          <th style="width:34%">What it enforces</th>
+          <th style="width:30%">Holds even if…</th>
+          <th style="width:16%">Status here</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Execution boundary</strong></td>
+          <td>Page code runs in the container. The endpoint receives video and audio frames only.</td>
+          <td>…the site is actively malicious and entirely unknown to any signature.</td>
+          <td><span class="chip ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Verified</span></td>
+        </tr>
+        <tr>
+          <td><strong>Single-use container</strong></td>
+          <td>Fresh filesystem and profile per session; deleted on disconnect.</td>
+          <td>…a site achieves persistence — it is discarded with the container.</td>
+          <td><span class="chip ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Verified</span></td>
+        </tr>
+        <tr>
+          <td><strong>Browser policy lock</strong></td>
+          <td>Managed policy denies all URLs except the session's destination. Dev tools, downloads, sync and popups off.</td>
+          <td>…the user tries to navigate elsewhere inside the stream.</td>
+          <td><span class="chip info"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4M8 4.9v.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Site-dependent</span></td>
+        </tr>
+        <tr>
+          <td><strong>Network isolation</strong></td>
+          <td>The container has no usable route of its own; the web is reachable only through the filtering proxy.</td>
+          <td>…code ignores the browser proxy setting entirely.</td>
+          <td><span class="chip block"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.6 11.4l6.8-6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Not enforced</span></td>
+        </tr>
+        <tr>
+          <td><strong>Egress allowlist</strong></td>
+          <td>The proxy permits only hosts belonging to active sessions, and filters content in transit.</td>
+          <td>…a session attempts to reach an unrelated destination.</td>
+          <td><span class="chip warn"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5l5.5 10.5H2.5L8 2.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 6.6v2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Demo mode</span></td>
+        </tr>
+        <tr>
+          <td><strong>In-container firewall</strong></td>
+          <td>Default-deny egress inside the container; only the proxy, DNS and media ports permitted.</td>
+          <td>…a process bypasses every browser-level control.</td>
+          <td><span class="chip block"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.6 11.4l6.8-6.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Not enforced</span></td>
+        </tr>
+        <tr>
+          <td><strong>Container hardening</strong></td>
+          <td>Privilege escalation disabled; auto-removal on exit; per-session memory ceiling.</td>
+          <td>…a container process attempts to gain privileges.</td>
+          <td><span class="chip info"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4M8 4.9v.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Partial</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong style="color:var(--text-primary)">Deployment status is stated separately from
+      design on purpose, and this environment is a demonstration profile — not a hardened
+      one.</strong> Measured directly, inside a live session:
+      <ul class="tight" style="margin:12px 0 10px">
+        <li><strong style="color:var(--text-primary)">Container egress is open.</strong> DNS
+          resolves, an outbound HTTPS request to a public site returns 200, and a request to a
+          raw IP address also succeeds. The container is on an ordinary bridge network with a
+          default gateway, not the isolated network the design calls for.</li>
+        <li><strong style="color:var(--text-primary)">The in-container firewall is absent.</strong>
+          The packet-filter ruleset inside the container is empty.</li>
+        <li><strong style="color:var(--text-primary)">The URL lock is site-dependent.</strong>
+          It is enforced for single-domain destinations — a Wikipedia session carries a
+          deny-all rule with a 23-entry exception list. It is deliberately lifted for the
+          YouTube and Teams host families, because those applications span many domains and a
+          single-host rule breaks video playback and sign-in.</li>
+      </ul>
+      What does hold, and was confirmed: page code executes only in the container and the
+      endpoint receives video and audio; each session gets a fresh container that is removed on
+      exit. Those are the load-bearing guarantees. The rest are configuration flags away from
+      active, and should be switched on before any production claim rests on them.
+    </div>
+
+    <div class="grid g2" style="margin-top:26px">
+      <div class="card">
+        <h3>TLS interception</h3>
+        <p style="margin:0 0 12px">
+          Termination uses an enterprise CA distributed to managed endpoints, which is what
+          allows per-URL policy and content inspection instead of blind tunnelling.
+        </p>
+        <dl class="kv">
+          <dt>Authority</dt><dd>Accops TLS Termination Root CA</dd>
+          <dt>Organisation</dt><dd>Accops.com</dd>
+          <dt>Valid to</dt><dd>June 2036</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Content controls in the isolated browser</h3>
+        <p style="margin:0 0 12px">
+          Beyond the URL lock, the session browser ships a declarative filter set covering ad
+          and tracker networks, so isolated browsing is also cleaner and lighter.
+        </p>
+        <dl class="kv">
+          <dt>Filter rules</dt><dd>103 network rules</dd>
+          <dt>Engine</dt><dd>Chromium 150</dd>
+          <dt>Disabled</dt><dd>dev tools · downloads · sync · popups</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PERFORMANCE ============ -->
+<section id="perf">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">08 — Measured performance</div>
+      <h2>Numbers from this deployment</h2>
+      <p>
+        Everything in this section was measured on the host described at the foot of the page.
+        Modelled figures are labelled as such. Nothing here is estimated from a datasheet.
+      </p>
+    </div>
+
+    <div class="grid g4">
+      <div class="card">
+        <div class="tile-label">Session CPU, video playback</div>
+        <div class="tile-value">0.90<span class="tile-unit">core</span></div>
+        <div class="tile-delta delta-good">
+          <svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V4M4.2 7.8L8 4l3.8 3.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" transform="rotate(180 8 8)"/></svg>
+          3× lower than at 720p
+        </div>
+        <div class="tile-note">Whole container, 5-sample mean, video confirmed advancing.</div>
+      </div>
+      <div class="card">
+        <div class="tile-label">Session CPU, at rest</div>
+        <div class="tile-value">0.10<span class="tile-unit">core</span></div>
+        <div class="tile-note">Damage-driven capture: a static page is nearly free.</div>
+      </div>
+      <div class="card">
+        <div class="tile-label">Memory per session</div>
+        <div class="tile-value">453<span class="tile-unit">MiB</span></div>
+        <div class="tile-note">At rest; 681 MiB under video. Configured ceiling 1.5 GiB.</div>
+      </div>
+      <div class="card">
+        <div class="tile-label">Cold start to healthy</div>
+        <div class="tile-value">9.3–16.3<span class="tile-unit">s</span></div>
+        <div class="tile-note">Measured across four workloads, no warm session available.</div>
+      </div>
+    </div>
+
+    <!-- chart 1 -->
+    <div class="card" style="margin-top:26px">
+      <h3>What a session costs, and what tuning changed</h3>
+      <p style="font-size:.85rem">
+        Whole-container CPU, measured as a 5-sample mean with the video confirmed to be
+        advancing. The 720p figure is the same platform before the streaming profile was
+        re-tuned; the reduction came from resolution, bitrate and encoder settings, not from
+        different hardware.
+      </p>
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:var(--s2)"></span>1280×720 · 2.5–3 Mbps</span>
+        <span class="legend-item"><span class="swatch" style="background:var(--s1)"></span>1024×576 · 2 Mbps <span style="color:var(--text-muted)">· current</span></span>
+      </div>
+      <div class="chart">
+        <div class="row">
+          <div class="row-label">Video, 720p</div>
+          <div class="track"><div class="bar" data-tip="Video at 1280×720, 2.5–3 Mbps|≈293% of one core (2.9 cores) — the earlier profile" style="width:97.7%;background:var(--s2)"><span class="bar-val">≈293%</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Video, current</div>
+          <div class="track"><div class="bar" data-tip="Video at 1024×576, 2 Mbps|90% of one core — 5-sample mean, 29.4% of framebuffer bytes changing" style="width:30%;background:var(--s1)"><span class="bar-val">90%</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">At rest, current</div>
+          <div class="track"><div class="bar" data-tip="Page loaded, nothing playing|10% of one core — damage-driven capture means a static page costs almost nothing" style="width:3.3%;background:var(--s1)"><span class="bar-val">10%</span></div></div>
+        </div>
+        <div class="axis-row">
+          <div></div>
+          <div class="axis-ticks"><span>0%</span><span>100%</span><span>200%</span><span>300%</span></div>
+        </div>
+      </div>
+      <details class="tv">
+        <summary>Table view</summary>
+        <table>
+          <thead><tr><th>State</th><th class="num">CPU (% of one core)</th><th class="num">Memory (MiB)</th><th class="num">Motion (%)</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Video, 1280×720 @ 2.5–3 Mbps</strong></td><td class="num">≈293</td><td class="num">890</td><td class="num">99</td></tr>
+            <tr><td><strong>Video, 1024×576 @ 2 Mbps</strong></td><td class="num">90</td><td class="num">681</td><td class="num">29.4</td></tr>
+            <tr><td><strong>At rest, 1024×576</strong></td><td class="num">10</td><td class="num">453</td><td class="num">0.0</td></tr>
+          </tbody>
+        </table>
+      </details>
+      <div class="prov">
+        Motion is the share of framebuffer bytes that changed between samples four seconds
+        apart — it is how playback was confirmed rather than assumed. A separate controlled
+        comparison of the encoder process alone, at fixed 720p, showed 195% falling to 92.6%
+        after the loss-recovery settings were removed.
+      </div>
+    </div>
+
+    <!-- chart 2 -->
+    <div class="card" style="margin-top:18px">
+      <h3>Audio path delay, by contributing stage</h3>
+      <p style="font-size:.85rem">
+        Server-side stages are configured values; the network leg is measured. Client-side
+        jitter buffering sits downstream of everything here and is set by the receiving
+        browser, so it is deliberately excluded rather than guessed at.
+      </p>
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:var(--s1)"></span>Capture latency <span style="color:var(--text-muted)">· configured</span></span>
+        <span class="legend-item"><span class="swatch" style="background:var(--s2)"></span>Opus frame <span style="color:var(--text-muted)">· configured</span></span>
+        <span class="legend-item"><span class="swatch" style="background:var(--s3)"></span>Network, one way <span style="color:var(--text-muted)">· measured</span></span>
+      </div>
+      <div class="chart">
+        <div class="row">
+          <div class="row-label">Audio path</div>
+          <div class="stack">
+            <div class="seg" data-tip="Capture latency|20 ms — configured period size on the virtual sink monitor" style="width:32.3%;background:var(--s1)"></div>
+            <div class="seg" data-tip="Opus frame|20 ms — packetisation interval" style="width:32.3%;background:var(--s2)"></div>
+            <div class="seg" data-tip="Network, one way|22.5 ms — half of the measured 45 ms round trip" style="width:35.4%;background:var(--s3)"></div>
+          </div>
+        </div>
+        <div class="axis-row">
+          <div class="row-label" style="color:var(--text-muted)">≈ 62 ms total</div>
+          <div class="axis-ticks"><span>0 ms</span><span>20</span><span>40</span><span>62</span></div>
+        </div>
+      </div>
+      <details class="tv">
+        <summary>Table view</summary>
+        <table>
+          <thead><tr><th>Stage</th><th class="num">Delay (ms)</th><th>Basis</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Capture latency</strong></td><td class="num">20.0</td><td>Configured</td></tr>
+            <tr><td><strong>Opus frame</strong></td><td class="num">20.0</td><td>Configured</td></tr>
+            <tr><td><strong>Network, one way</strong></td><td class="num">22.5</td><td>Measured — half of 45 ms RTT</td></tr>
+            <tr><td><strong>Subtotal</strong></td><td class="num">62.5</td><td>Excludes client jitter buffer</td></tr>
+          </tbody>
+        </table>
+      </details>
+      <div class="prov">
+        Separately measured: virtual sink latency fell from 9.9 ms to 1.5 ms after tuning.
+      </div>
+    </div>
+
+    <!-- chart 2b — per-workload, real measurements -->
+    <div class="card" style="margin-top:18px">
+      <h3>Cold start to a usable session, by workload</h3>
+      <p style="font-size:.85rem">
+        Wall-clock from the intercepted request to the container reporting healthy, measured
+        per workload with no warm session available. This is the delay a user actually waits
+        the first time they open an isolated site.
+      </p>
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:var(--s1)"></span>Seconds to healthy</span>
+      </div>
+      <div class="chart">
+        <div class="row">
+          <div class="row-label">Webcam &amp; mic test</div>
+          <div class="track"><div class="bar" data-tip="webcammictest.com|13.8 s to healthy · lightest of the five" style="width:46%;background:var(--s1)"><span class="bar-val">13.8 s</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">YouTube</div>
+          <div class="track"><div class="bar" data-tip="YouTube|14.2 s to healthy · heaviest at rest, 455 MiB" style="width:47.3%;background:var(--s1)"><span class="bar-val">14.2 s</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Camera test</div>
+          <div class="track"><div class="bar" data-tip="webcamtests.com|14.3 s to healthy · 321 MiB · busiest page at rest" style="width:47.7%;background:var(--s1)"><span class="bar-val">14.3 s</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Wikipedia</div>
+          <div class="track"><div class="bar" data-tip="Wikipedia|17.4 s to healthy · lightest at rest, 276 MiB · full URL lock enforced" style="width:58%;background:var(--s1)"><span class="bar-val">17.4 s</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Teams</div>
+          <div class="track"><div class="bar" data-tip="Microsoft Teams|26.4 s to healthy — slowest, and the only one with a federated sign-in redirect chain to walk" style="width:88%;background:var(--s1)"><span class="bar-val">26.4 s</span></div></div>
+        </div>
+        <div class="axis-row">
+          <div></div>
+          <div class="axis-ticks"><span>0 s</span><span>10</span><span>20</span><span>30</span></div>
+        </div>
+      </div>
+      <details class="tv">
+        <summary>Table view — full per-workload resource matrix</summary>
+        <table>
+          <thead><tr><th>Workload</th><th class="num">To healthy (s)</th><th class="num">CPU (% core)</th><th class="num">Memory (MiB)</th><th class="num">Motion (%)</th><th>Window title observed</th></tr></thead>
+          <tbody>
+            <tr><td><strong>webcammictest.com</strong></td><td class="num">13.8</td><td class="num">3</td><td class="num">276</td><td class="num">0.0</td><td>Test Webcam Online</td></tr>
+            <tr><td><strong>YouTube</strong></td><td class="num">14.2</td><td class="num">5</td><td class="num">455</td><td class="num">0.0</td><td>YouTube</td></tr>
+            <tr><td><strong>webcamtests.com</strong></td><td class="num">14.3</td><td class="num">20</td><td class="num">321</td><td class="num">7.1</td><td>Webcam Test</td></tr>
+            <tr><td><strong>Wikipedia</strong></td><td class="num">17.4</td><td class="num">3</td><td class="num">276</td><td class="num">0.0</td><td>Wikipedia, the free encyclopedia</td></tr>
+            <tr><td><strong>Microsoft Teams</strong></td><td class="num">26.4</td><td class="num">7</td><td class="num">326</td><td class="num">0.0</td><td>Sign in to your account</td></tr>
+          </tbody>
+        </table>
+      </details>
+      <div class="prov">
+        All five reached healthy and rendered their real page. CPU and memory are sampled at
+        rest with no viewer attached, so they are the STANDING cost of an idle session — plan
+        capacity against the video figures above instead. The spread is narrow: 276–455 MiB and
+        3–20% of a core, so workload choice barely moves the per-session footprint. What does
+        move is whether video is playing.
+      </div>
+    </div>
+
+    <!-- memory by workload -->
+    <div class="card" style="margin-top:18px">
+      <h3>Standing memory cost, by workload</h3>
+      <p style="font-size:.85rem">
+        Resident memory of an idle session with its page loaded. Useful because the per-session
+        ceiling — not CPU — is what caps how many sessions fit on a host for non-video work.
+      </p>
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:var(--s1)"></span>Memory at rest</span>
+      </div>
+      <div class="chart">
+        <div class="row">
+          <div class="row-label">Wikipedia</div>
+          <div class="track"><div class="bar" data-tip="Wikipedia|276 MiB — text-only, the cheapest workload measured" style="width:55.2%;background:var(--s1)"><span class="bar-val">276 MiB</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Webcam &amp; mic test</div>
+          <div class="track"><div class="bar" data-tip="webcammictest.com|276 MiB" style="width:55.2%;background:var(--s1)"><span class="bar-val">276 MiB</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Camera test</div>
+          <div class="track"><div class="bar" data-tip="webcamtests.com|321 MiB — carries ad units, hence the higher idle CPU too" style="width:64.2%;background:var(--s1)"><span class="bar-val">321 MiB</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Teams</div>
+          <div class="track"><div class="bar" data-tip="Microsoft Teams|326 MiB at the sign-in stage" style="width:65.2%;background:var(--s1)"><span class="bar-val">326 MiB</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">YouTube</div>
+          <div class="track"><div class="bar" data-tip="YouTube|455 MiB — heaviest page, before any video starts" style="width:91%;background:var(--s1)"><span class="bar-val">455 MiB</span></div></div>
+        </div>
+        <div class="axis-row">
+          <div></div>
+          <div class="axis-ticks"><span>0</span><span>250</span><span>500 MiB</span></div>
+        </div>
+      </div>
+      <details class="tv">
+        <summary>Table view</summary>
+        <table>
+          <thead><tr><th>Workload</th><th class="num">Memory at rest (MiB)</th><th class="num">Share of 1.5 GiB ceiling</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Wikipedia</strong></td><td class="num">276</td><td class="num">18%</td></tr>
+            <tr><td><strong>webcammictest.com</strong></td><td class="num">276</td><td class="num">18%</td></tr>
+            <tr><td><strong>webcamtests.com</strong></td><td class="num">321</td><td class="num">21%</td></tr>
+            <tr><td><strong>Microsoft Teams</strong></td><td class="num">326</td><td class="num">21%</td></tr>
+            <tr><td><strong>YouTube</strong></td><td class="num">455</td><td class="num">30%</td></tr>
+            <tr><td><strong>YouTube, video playing</strong></td><td class="num">681</td><td class="num">44%</td></tr>
+          </tbody>
+        </table>
+      </details>
+      <div class="prov">
+        Even the heaviest case under load uses 44% of the configured ceiling, which is why
+        right-sizing that ceiling is the cheapest way to raise session density.
+      </div>
+    </div>
+
+    <!-- chart 3 -->
+    <div class="card" style="margin-top:18px">
+      <h3>Concurrent sessions per host, by workload <span style="font-weight:400;color:var(--text-muted);font-size:.8rem">— modelled</span></h3>
+      <p style="font-size:.85rem">
+        Derived from the measured per-session costs above against this host's 8 vCPU and
+        11 GiB. Two ceilings apply: raw CPU, and the 1.5 GiB per-session memory cap the
+        platform configures. Provisioning against that cap is the conservative read and is
+        what gives the lower figure. Shown to size hardware, not as a benchmark result.
+      </p>
+      <div class="legend">
+        <span class="legend-item"><span class="swatch" style="background:var(--s1)"></span>Sessions per host</span>
+      </div>
+      <div class="chart">
+        <div class="row">
+          <div class="row-label">Continuous video</div>
+          <div class="track"><div class="bar" data-tip="Continuous video|CPU allows ~8.9 sessions at 0.90 core each; the 1.5 GiB per-session cap allows 7. Actual memory use is 681 MiB, so real memory would allow ~16." style="width:35%;background:var(--s1)"><span class="bar-val">7–8</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Ordinary browsing</div>
+          <div class="track"><div class="bar" data-tip="Ordinary browsing|CPU allows ~80 sessions at 0.10 core each; the 1.5 GiB per-session cap is the only real limit at 7. Actual memory use is 453 MiB, so real memory would allow ~24." style="width:35%;background:var(--s1)"><span class="bar-val">7 · capped</span></div></div>
+        </div>
+        <div class="row">
+          <div class="row-label">Concurrent cameras</div>
+          <div class="track"><div class="bar" data-tip="Concurrent cameras|4 on this host — one per provisioned loopback node. Raising the node count raises the ceiling; sharing a node collapses every reader's frame rate to ~1 fps." style="width:20%;background:var(--s1)"><span class="bar-val">4 · one per node</span></div></div>
+        </div>
+        <div class="axis-row">
+          <div></div>
+          <div class="axis-ticks"><span>0</span><span>8</span><span>16</span><span>20</span></div>
+        </div>
+      </div>
+      <details class="tv">
+        <summary>Table view</summary>
+        <table>
+          <thead><tr><th>Workload</th><th class="num">By CPU</th><th class="num">By memory cap</th><th class="num">By actual memory</th><th>Plan for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Continuous video</strong></td><td class="num">8.9</td><td class="num">7</td><td class="num">16.5</td><td>7–8</td></tr>
+            <tr><td><strong>Ordinary browsing</strong></td><td class="num">80</td><td class="num">7</td><td class="num">24.9</td><td>7</td></tr>
+            <tr><td><strong>Concurrent cameras</strong></td><td class="num">n/a</td><td class="num">n/a</td><td class="num">n/a</td><td>4 — one per provisioned loopback node</td></tr>
+          </tbody>
+        </table>
+      </details>
+      <div class="prov">
+        Raising the per-session memory cap, or right-sizing it to the 681 MiB actually
+        observed, is the cheapest way to lift the browsing ceiling — CPU is nowhere near
+        binding for non-video work.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WORKLOADS ============ -->
+<section id="workloads">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">09 — Workload validation</div>
+      <h2>What has been exercised, and what has not</h2>
+      <p>
+        Isolation is easy to demonstrate on a static page and hard on a real application. All
+        five workloads below were exercised on this deployment, including a live Teams call with
+        camera and microphone — the hardest case, because it combines federated sign-in,
+        conferencing and two-way media in one session.
+      </p>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:18%">Workload</th>
+          <th style="width:24%">Exercises</th>
+          <th style="width:34%">Result</th>
+          <th style="width:24%">State</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>YouTube</strong></td>
+          <td>Continuous video, audio, search, in-page interaction</td>
+          <td>Renders and plays end to end, and the fastest to start of the four at 9.3 s. Frame-by-frame comparison confirmed the picture advancing continuously with ~99% of framebuffer bytes changing between samples; audio track active throughout. Search and video selection driven from inside the stream. Heaviest at rest, 459 MiB.</td>
+          <td><span class="chip ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Verified end to end</span></td>
+        </tr>
+        <tr>
+          <td><strong>Wikipedia</strong></td>
+          <td>Text-heavy reading, low-motion rendering, strict URL lock</td>
+          <td>Renders correctly. The lightest workload measured — 290 MiB and 4% of one core at rest. Notably this is the profile where the URL lock is fully enforced (deny-all plus exception list), so it is the closest of the four to the intended security posture.</td>
+          <td><span class="chip ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Verified</span></td>
+        </tr>
+        <tr>
+          <td><strong>Camera test site</strong></td>
+          <td>Camera passthrough into the isolated browser</td>
+          <td><strong>Live camera image at the full 30 fps.</strong> The isolated browser enumerates the device as a normal webcam and the test page reports a real picture at 640×480, 0.31 MP, ~168 kB/s. This workload also exposed the shared-node defect — frame rate read 1 fps against a device advertising 30 — which is now fixed by one node per session. Busiest page at rest of the five (20% of a core, 321 MiB), because it carries ad units.</td>
+          <td><span class="chip ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Verified — 30 fps</span></td>
+        </tr>
+        <tr>
+          <td><strong>Webcam &amp; mic test</strong><br><span style="color:var(--text-muted);font-size:.78rem">webcammictest.com</span></td>
+          <td>Camera and microphone on a single-domain site</td>
+          <td>Renders correctly and is the fastest and joint-lightest of the five — 13.8 s, 276 MiB, 3% of a core. Being single-domain it keeps the <em>full</em> URL lock active, unlike YouTube and Teams, so it is the better site to demonstrate camera passthrough and isolation together. Also covers microphone and headphone checks.</td>
+          <td><span class="chip ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Verified</span></td>
+        </tr>
+        <tr>
+          <td><strong>Microsoft Teams</strong></td>
+          <td>Federated sign-in, conferencing, camera and microphone together</td>
+          <td><strong>Working, including a live call.</strong> Sign-in completes and conferencing runs inside isolation with camera and microphone. Reaching a usable session takes 26.4 s — the slowest of the five, because it is the only one that walks a federated sign-in redirect chain before rendering. Standing cost at the sign-in stage is 326 MiB and 7% of a core. Previously Teams was not an isolation target at all, so it never entered the platform; that, rather than the URL policy, was the real blocker.</td>
+          <td><span class="chip ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Verified — call confirmed</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      <strong style="color:var(--text-primary)">The Teams case is worth understanding, because
+      it generalises.</strong> Any application whose sign-in spans multiple domains conflicts
+      with a one-destination lock. Supporting it means widening a session's allowlist to that
+      application's identity and content domains — which is a deliberate, narrower guarantee
+      than single-host isolation, and should be described that way rather than presented as
+      equivalent. The change is understood and scoped; it is a policy decision as much as an
+      engineering one.
+    </div>
+  </div>
+</section>
+
+<!-- ============ ENVIRONMENT ============ -->
+<section id="env" style="border-bottom:none">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">10 — Test environment</div>
+      <h2>Where these numbers came from</h2>
+      <p>
+        A single mid-range server, not a tuned benchmark rig. Figures scale with the host;
+        the per-session costs above are the ones to plan against.
+      </p>
+    </div>
+    <div class="grid g3">
+      <div class="card">
+        <h3>Host</h3>
+        <dl class="kv">
+          <dt>CPU</dt><dd>Intel Xeon Platinum 8180 @ 2.5 GHz</dd>
+          <dt>vCPU</dt><dd>8</dd>
+          <dt>Memory</dt><dd>11 GiB</dd>
+          <dt>OS</dt><dd>Ubuntu 24.04, kernel 6.17</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Components</h3>
+        <dl class="kv">
+          <dt>Control plane</dt><dd>286 MB image</dd>
+          <dt>Session image</dt><dd>2.37 GB</dd>
+          <dt>Browser</dt><dd>Chromium 150.0.7871.100</dd>
+          <dt>Codecs</dt><dd>VP8 video · Opus audio</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h3>Client &amp; network</h3>
+        <dl class="kv">
+          <dt>Client</dt><dd>macOS, standard browser</dd>
+          <dt>Round trip</dt><dd>45 ms, 0% loss</dd>
+          <dt>Inbound UDP</dt><dd>Blocked</dd>
+          <dt>Media transport</dt><dd>TCP multiplex</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:30px">
+      <strong style="color:var(--text-primary)">Where the remaining effort is.</strong>
+      The streaming platform works and is efficient: four workloads render, video and audio
+      play, the client's camera reaches the isolated browser, sessions start in nine to sixteen
+      seconds, and a video session costs well under one core. Roughly seven to eight concurrent
+      sessions fit on this modest host.
+      <br><br>
+      The gap to a production claim is <strong>containment</strong>, and it is five specific
+      items: move sessions onto the isolated network so the container has no route of its own;
+      enable the egress allowlist and the in-container firewall; tighten capabilities to
+      drop-all-then-add-back; stop spawning sessions for sub-resource requests, which both
+      multiplies containers and lets a stray request claim a camera node; and resolve the
+      multi-domain question so YouTube and Teams do not require lifting the URL lock wholesale.
+      None is speculative and none blocks the others. Until they are done this is a strong
+      demonstration of the isolation <em>architecture</em> rather than an enforced isolation
+      <em>boundary</em> — a distinction worth stating plainly to customers, because the
+      streaming half is genuinely ready and the containment half is not yet switched on.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Glass Fence · Remote Browser Isolation · Accops.<br>
+    Measurements taken on the environment described above. Modelled and unverified figures are
+    labelled throughout; no figure on this page is extrapolated from vendor documentation.
+  </div>
+</footer>
+
+<script>
+(function () {
+  // theme toggle — must beat both the OS setting and a previous stamp
+  var root = document.documentElement, btn = document.getElementById('themeBtn');
+  function label() { btn.textContent = root.getAttribute('data-theme') === 'dark' ? 'Light' : 'Dark'; }
+  label();
+  btn.addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    label();
+  });
+
+  // hover + keyboard tooltip layer; values are also in every table view, so this
+  // enhances rather than gates.
+  var tip = document.getElementById('tip');
+  function show(el, x, y) {
+    var raw = el.getAttribute('data-tip'); if (!raw) return;
+    var parts = raw.split('|');
+    tip.innerHTML = '<strong></strong><span></span>';
+    tip.firstChild.textContent = parts[0];
+    tip.lastChild.textContent = parts[1] || '';
+    tip.style.opacity = '1';
+    var r = tip.getBoundingClientRect();
+    var left = Math.min(x + 14, window.innerWidth - r.width - 12);
+    var top = Math.max(10, y - r.height - 12);
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  }
+  function hide() { tip.style.opacity = '0'; }
+
+  document.querySelectorAll('[data-tip]').forEach(function (el) {
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('mousemove', function (e) { show(el, e.clientX, e.clientY); });
+    el.addEventListener('mouseleave', hide);
+    el.addEventListener('focus', function () {
+      var b = el.getBoundingClientRect();
+      show(el, b.left + b.width / 2, b.top + b.height);
+    });
+    el.addEventListener('blur', hide);
+  });
+})();
+</script>
+</body>
+</html>
